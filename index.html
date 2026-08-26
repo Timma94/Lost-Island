@@ -1,9 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>Lost Island</title>
+
+    <!-- External stylesheet -->
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -11,58 +15,118 @@
 
 <div id="app">
 
+    <!-- HEADER -->
     <header>
+
         <div>
             <h1>🏝️ LOST ISLAND</h1>
-            <p class="subtitle">Survive. Explore. Discover a way home.</p>
+
+            <p class="subtitle">
+                Survive. Explore. Discover a way home.
+            </p>
         </div>
 
-        <button id="settingsBtn" class="gear">⚙️</button>
+        <button
+            id="settingsBtn"
+            class="gear"
+            type="button">
+            ⚙️
+        </button>
+
     </header>
 
+
+    <!-- CHASTIFY CONNECTION -->
     <div class="connection">
-        <span id="connectionDot" class="dot offline"></span>
-        <span id="connectionText">Chastify: Offline</span>
+
+        <span
+            id="connectionDot"
+            class="dot offline">
+        </span>
+
+        <span id="connectionText">
+            Chastify: Offline
+        </span>
+
     </div>
 
+
+    <!-- STATUS -->
     <section class="status">
 
         <div class="stat">
+
             <span>❤️ Health</span>
-            <strong id="health">100</strong>
+
+            <strong id="health">
+                100
+            </strong>
+
         </div>
 
+
         <div class="stat">
+
             <span>💧 Water</span>
-            <strong id="water">2</strong>
+
+            <strong id="water">
+                2
+            </strong>
+
         </div>
 
+
         <div class="stat">
+
             <span>🍎 Food</span>
-            <strong id="food">2</strong>
+
+            <strong id="food">
+                2
+            </strong>
+
         </div>
 
+
         <div class="stat">
+
             <span>🪵 Materials</span>
-            <strong id="materials">1</strong>
+
+            <strong id="materials">
+                1
+            </strong>
+
         </div>
 
+
         <div class="stat">
+
             <span>📅 Day</span>
-            <strong id="day">1</strong>
+
+            <strong id="day">
+                1
+            </strong>
+
         </div>
 
     </section>
 
+
+    <!-- MAIN GAME -->
     <main>
 
-        <div id="story" class="story">
 
-            <h2>🏕️ Your Camp</h2>
+        <!-- STORY -->
+        <div
+            id="story"
+            class="story">
+
+            <h2>
+                🏕️ Your Camp
+            </h2>
 
             <p>
-                You wake up on the beach surrounded by the remains
-                of the wreck.
+                You wake up on the beach surrounded
+                by the remains of the wreck.
             </p>
 
             <p>
@@ -71,123 +135,289 @@
             </p>
 
             <p class="important">
-                You need to survive — and find a way off the island.
+                You need to survive —
+                and find a way off the island.
             </p>
 
         </div>
 
-        <div id="event" class="event hidden"></div>
 
+        <!-- EVENT -->
+        <div
+            id="event"
+            class="event hidden">
+        </div>
+
+
+        <!-- ACTIONS -->
         <div id="actions">
 
-            <h3>What will you do?</h3>
+            <h3>
+                What will you do?
+            </h3>
 
-            <button class="action" data-action="water">
+
+            <button
+                class="action"
+                data-action="water"
+                type="button">
+
                 💧 Search for water
+
             </button>
 
-            <button class="action" data-action="explore">
+
+            <button
+                class="action"
+                data-action="explore"
+                type="button">
+
                 🌴 Explore
+
             </button>
 
-            <button class="action" data-action="materials">
+
+            <button
+                class="action"
+                data-action="materials"
+                type="button">
+
                 🪵 Gather materials
+
             </button>
 
-            <button class="action" data-action="wreck">
+
+            <button
+                class="action"
+                data-action="wreck"
+                type="button">
+
                 ⚓ Investigate the wreck
+
             </button>
 
-            <button class="action" data-action="camp">
+
+            <button
+                class="action"
+                data-action="camp"
+                type="button">
+
                 🏕️ Work on your camp
+
             </button>
 
         </div>
 
-        <div id="result" class="result hidden"></div>
+
+        <!-- RESULT -->
+        <div
+            id="result"
+            class="result hidden">
+        </div>
+
 
     </main>
 
 </div>
 
 
-<!-- SETTINGS -->
+<!-- =====================================================
+     SETTINGS MODAL
+===================================================== -->
 
-<div id="settingsModal" class="modal hidden">
+<div
+    id="settingsModal"
+    class="modal hidden">
 
     <div class="modal-content">
 
-        <h2>⚙️ Lost Island Settings</h2>
+
+        <h2>
+            ⚙️ Lost Island Settings
+        </h2>
+
+
+        <!-- DIFFICULTY -->
 
         <label>
+
             Difficulty
+
             <select id="difficulty">
-                <option value="easy">Easy</option>
-                <option value="normal" selected>Normal</option>
-                <option value="hard">Hard</option>
-                <option value="brutal">Brutal</option>
+
+                <option value="easy">
+                    Easy
+                </option>
+
+                <option
+                    value="normal"
+                    selected>
+                    Normal
+                </option>
+
+                <option value="hard">
+                    Hard
+                </option>
+
+                <option value="brutal">
+                    Brutal
+                </option>
+
             </select>
+
         </label>
+
 
         <hr>
 
-        <h3>🎲 RNG</h3>
+
+        <!-- RNG -->
+
+        <h3>
+            🎲 RNG
+        </h3>
+
 
         <label>
+
             Reward %
-            <input id="rewardChance" type="number" min="0" max="100" value="35">
+
+            <input
+                id="rewardChance"
+                type="number"
+                min="0"
+                max="100"
+                value="35">
+
         </label>
 
+
         <label>
+
             Neutral %
-            <input id="neutralChance" type="number" min="0" max="100" value="40">
+
+            <input
+                id="neutralChance"
+                type="number"
+                min="0"
+                max="100"
+                value="40">
+
         </label>
 
+
         <label>
+
             Punishment %
-            <input id="punishmentChance" type="number" min="0" max="100" value="25">
+
+            <input
+                id="punishmentChance"
+                type="number"
+                min="0"
+                max="100"
+                value="25">
+
         </label>
+
 
         <hr>
 
-        <h3>🔒 Time consequences</h3>
+
+        <!-- TIME CONSEQUENCES -->
+
+        <h3>
+            🔒 Time consequences
+        </h3>
+
 
         <label>
+
             Reward minimum (minutes)
-            <input id="rewardMin" type="number" value="30">
+
+            <input
+                id="rewardMin"
+                type="number"
+                min="0"
+                value="30">
+
         </label>
 
+
         <label>
+
             Reward maximum (minutes)
-            <input id="rewardMax" type="number" value="60">
+
+            <input
+                id="rewardMax"
+                type="number"
+                min="0"
+                value="60">
+
         </label>
 
+
         <label>
+
             Punishment minimum (minutes)
-            <input id="punishmentMin" type="number" value="60">
+
+            <input
+                id="punishmentMin"
+                type="number"
+                min="0"
+                value="60">
+
         </label>
 
+
         <label>
+
             Punishment maximum (minutes)
-            <input id="punishmentMax" type="number" value="300">
+
+            <input
+                id="punishmentMax"
+                type="number"
+                min="0"
+                value="300">
+
         </label>
+
 
         <hr>
 
-        <button id="saveSettings" class="primary">
+
+        <!-- SETTINGS BUTTONS -->
+
+        <button
+            id="saveSettings"
+            class="primary"
+            type="button">
+
             Save settings
+
         </button>
 
-        <button id="closeSettings" class="secondary">
+
+        <button
+            id="closeSettings"
+            class="secondary"
+            type="button">
+
             Cancel
+
         </button>
+
 
     </div>
 
 </div>
 
 
+<!-- =====================================================
+     GAME JAVASCRIPT
+===================================================== -->
+
 <script src="game.js"></script>
 
 </body>
+
 </html>
