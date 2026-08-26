@@ -1,7 +1,7 @@
 /* =========================================================
    LOST ISLAND
    Chastify + Cloudflare Worker Integration
-   DIAGNOSTIC VERSION
+   IFRAME HASH AUTHENTICATION VERSION
    ========================================================= */
 
 "use strict";
@@ -41,6 +41,9 @@ const gameState = {
 
     sessionId: null,
     mainToken: null,
+
+    bridgeNonce: null,
+    parentOrigin: null,
 
     lastResult: null
 };
@@ -141,7 +144,6 @@ function formatMinutes(minutes) {
     if (minutes < 60) {
 
         return `${minutes} minute${minutes === 1 ? "" : "s"}`;
-
     }
 
     const hours =
@@ -155,7 +157,6 @@ function formatMinutes(minutes) {
         if (remainingMinutes === 0) {
 
             return `${hours} hour${hours === 1 ? "" : "s"}`;
-
         }
 
         return `${hours}h ${remainingMinutes}m`;
@@ -246,6 +247,7 @@ function safeDebugObject(object) {
 
                 if (
                     key === "mainToken" ||
+                    key === "main_token" ||
                     key === "token" ||
                     key === "accessToken" ||
                     key === "developerKey" ||
@@ -265,6 +267,37 @@ function safeDebugObject(object) {
 
         return String(object);
     }
+}
+
+
+/* =========================================================
+   REQUEST ID
+   ========================================================= */
+
+function createRequestId() {
+
+    try {
+
+        if (
+            window.crypto &&
+            typeof window.crypto.randomUUID ===
+            "function"
+        ) {
+
+            return window.crypto.randomUUID();
+        }
+
+    } catch (error) {
+        // Fall through to fallback.
+    }
+
+    return (
+        Date.now().toString() +
+        "-" +
+        Math.random()
+            .toString(36)
+            .substring(2)
+    );
 }
 
 
@@ -293,16 +326,26 @@ function setConnectionStatus(connected) {
 
     if (connected) {
 
-        dot.classList.remove("offline");
-        dot.classList.add("online");
+        dot.classList.remove(
+            "offline"
+        );
+
+        dot.classList.add(
+            "online"
+        );
 
         text.textContent =
             "Chastify: Connected";
 
     } else {
 
-        dot.classList.remove("online");
-        dot.classList.add("offline");
+        dot.classList.remove(
+            "online"
+        );
+
+        dot.classList.add(
+            "offline"
+        );
 
         text.textContent =
             "Chastify: Offline";
@@ -311,10 +354,277 @@ function setConnectionStatus(connected) {
 
 
 /* =========================================================
+   READ IFRAME HASH
+   ========================================================= */
+
+function readIframeHash() {
+
+    showDebug(
+        "Reading Chastify iframe launch hash..."
+    );
+
+    const rawHash =
+        window.location.hash;
+
+    if (!rawHash) {
+
+        showDebug(
+            "ERROR: No iframe hash was provided by Chastify."
+        );
+
+        return false;
+    }
+
+    showDebug(
+        "Iframe hash detected."
+    );
+
+
+    /*
+       Remove the leading "#".
+    */
+
+    let encoded =
+        rawHash.startsWith("#")
+            ? rawHash.substring(1)
+            : rawHash;
+
+
+    /*
+       Some iframe URLs may contain URL-encoded
+       JSON, while others may contain plain JSON.
+    */
+
+    let decoded;
+
+    try {
+
+        decoded =
+            decodeURIComponent(encoded);
+
+    } catch (error) {
+
+        decoded =
+            encoded;
+
+        showDebug(
+            "Hash was not URI encoded; using raw hash."
+        );
+    }
+
+
+    let hashData;
+
+    try {
+
+        hashData =
+            JSON.parse(decoded);
+
+    } catch (error) {
+
+        showDebug(
+            "ERROR: Could not parse iframe hash as JSON.\n" +
+            error.message
+        );
+
+        return false;
+    }
+
+
+    if (
+        !hashData ||
+        typeof hashData !== "object"
+    ) {
+
+        showDebug(
+            "ERROR: Iframe hash did not contain an object."
+        );
+
+        return false;
+    }
+
+
+    /*
+       Store application/session information.
+    */
+
+    if (hashData.appId) {
+
+        gameState.appId =
+            hashData.appId;
+    }
+
+    if (hashData.lockId) {
+
+        gameState.lockId =
+            hashData.lockId;
+    }
+
+    if (hashData.sessionId) {
+
+        gameState.sessionId =
+            hashData.sessionId;
+    }
+
+
+    /*
+       MAIN TOKEN
+       This is the important authentication value.
+    */
+
+    if (hashData.mainToken) {
+
+        gameState.mainToken =
+            hashData.mainToken;
+    }
+
+
+    /*
+       Bridge information.
+    */
+
+    if (
+        hashData.bridge &&
+        typeof hashData.bridge === "object"
+    ) {
+
+        if (hashData.bridge.nonce) {
+
+            gameState.bridgeNonce =
+                hashData.bridge.nonce;
+        }
+
+        if (hashData.bridge.parentOrigin) {
+
+            gameState.parentOrigin =
+                hashData.bridge.parentOrigin;
+        }
+    }
+
+
+    /*
+       Some versions/formats may expose bridge values
+       at the top level. Accept those as a fallback.
+    */
+
+    if (
+        !gameState.bridgeNonce &&
+        hashData.nonce
+    ) {
+
+        gameState.bridgeNonce =
+            hashData.nonce;
+    }
+
+    if (
+        !gameState.parentOrigin &&
+        hashData.parentOrigin
+    ) {
+
+        gameState.parentOrigin =
+            hashData.parentOrigin;
+    }
+
+
+    /*
+       DO NOT print the actual mainToken.
+    */
+
+    showDebug(
+        "Chastify iframe authentication data:\n" +
+        "appId: " +
+        (
+            gameState.appId ||
+            "NOT FOUND"
+        ) +
+        "\n" +
+        "lockId: " +
+        (
+            gameState.lockId ||
+            "NOT FOUND"
+        ) +
+        "\n" +
+        "sessionId: " +
+        (
+            gameState.sessionId ||
+            "NOT FOUND"
+        ) +
+        "\n" +
+        "mainToken: " +
+        (
+            gameState.mainToken
+                ? "[AVAILABLE]"
+                : "NOT FOUND"
+        ) +
+        "\n" +
+        "bridge.nonce: " +
+        (
+            gameState.bridgeNonce
+                ? "[AVAILABLE]"
+                : "NOT FOUND"
+        ) +
+        "\n" +
+        "bridge.parentOrigin: " +
+        (
+            gameState.parentOrigin ||
+            "NOT FOUND"
+        )
+    );
+
+
+    /*
+       Validate the values required for the bridge.
+    */
+
+    if (!gameState.sessionId) {
+
+        showDebug(
+            "ERROR: sessionId was not found in iframe hash."
+        );
+
+        return false;
+    }
+
+    if (!gameState.mainToken) {
+
+        showDebug(
+            "ERROR: mainToken was not found in iframe hash."
+        );
+
+        return false;
+    }
+
+    if (!gameState.bridgeNonce) {
+
+        showDebug(
+            "ERROR: bridge.nonce was not found in iframe hash."
+        );
+
+        return false;
+    }
+
+    if (!gameState.parentOrigin) {
+
+        showDebug(
+            "ERROR: bridge.parentOrigin was not found in iframe hash."
+        );
+
+        return false;
+    }
+
+
+    return true;
+}
+
+
+/* =========================================================
    SEND MESSAGE TO CHASTIFY
    ========================================================= */
 
-function sendToChastify(message) {
+function sendToChastify(
+    message,
+    targetOrigin
+) {
 
     try {
 
@@ -330,15 +640,42 @@ function sendToChastify(message) {
             return false;
         }
 
+
+        const destination =
+            targetOrigin ||
+            gameState.parentOrigin ||
+            CHASTIFY_ORIGIN;
+
+
+        /*
+           Add nonce to every bridge request.
+
+           The nonce comes from the iframe launch hash.
+        */
+
+        const messageToSend = {
+
+            ...message,
+
+            nonce:
+                message.nonce ||
+                gameState.bridgeNonce
+        };
+
+
         window.parent.postMessage(
-            message,
-            CHASTIFY_ORIGIN
+            messageToSend,
+            destination
         );
+
 
         showDebug(
             "SENT TO CHASTIFY:\n" +
-            safeDebugObject(message)
+            safeDebugObject(
+                messageToSend
+            )
         );
+
 
         return true;
 
@@ -355,6 +692,56 @@ function sendToChastify(message) {
 
 
 /* =========================================================
+   REQUEST SESSION
+   ========================================================= */
+
+function requestSession() {
+
+    if (!gameState.sessionId) {
+
+        showDebug(
+            "Cannot request session: sessionId missing."
+        );
+
+        return;
+    }
+
+    if (!gameState.bridgeNonce) {
+
+        showDebug(
+            "Cannot request session: bridge nonce missing."
+        );
+
+        return;
+    }
+
+
+    showDebug(
+        "Requesting Chastify session information..."
+    );
+
+
+    sendToChastify({
+
+        type:
+            "chastify:ext:req",
+
+        v:
+            1,
+
+        id:
+            createRequestId(),
+
+        action:
+            "session.get",
+
+        payload:
+            {}
+    });
+}
+
+
+/* =========================================================
    CONNECT TO CHASTIFY
    ========================================================= */
 
@@ -364,28 +751,36 @@ function connectToChastify() {
         "Connecting to Chastify..."
     );
 
-    const requestId =
-        crypto.randomUUID ?
-        crypto.randomUUID() :
-        Date.now().toString();
 
-    sendToChastify({
+    /*
+       Step 1:
+       Read authentication information from
+       the iframe launch hash.
+    */
 
-        type:
-            "chastify:ext:req",
+    const hashValid =
+        readIframeHash();
 
-        v:
-            1,
 
-        id:
-            requestId,
+    if (!hashValid) {
 
-        action:
-            "setup.init",
+        setConnectionStatus(false);
 
-        payload:
-            {}
-    });
+        showDebug(
+            "Chastify authentication data is incomplete."
+        );
+
+        return;
+    }
+
+
+    /*
+       Step 2:
+       Ask the Chastify parent for the current
+       session using the launch nonce.
+    */
+
+    requestSession();
 }
 
 
@@ -395,14 +790,18 @@ function connectToChastify() {
 
 function requestConfig() {
 
+    /*
+       setup.get_config is only relevant when the
+       extension has a setup/configuration page.
+
+       We keep this because your existing extension
+       already uses it.
+    */
+
     showDebug(
         "Requesting current Chastify configuration..."
     );
 
-    const requestId =
-        crypto.randomUUID ?
-        crypto.randomUUID() :
-        Date.now().toString();
 
     sendToChastify({
 
@@ -413,7 +812,7 @@ function requestConfig() {
             1,
 
         id:
-            requestId,
+            createRequestId(),
 
         action:
             "setup.get_config",
@@ -432,15 +831,31 @@ window.addEventListener(
     "message",
     function(event) {
 
+        /*
+           Only accept messages from the Chastify
+           parent origin.
+
+           If Chastify supplied a parentOrigin in
+           the iframe hash, prefer that.
+        */
+
+        const expectedOrigin =
+            gameState.parentOrigin ||
+            CHASTIFY_ORIGIN;
+
+
         if (
             event.origin !==
-            CHASTIFY_ORIGIN
+            expectedOrigin
         ) {
+
             return;
         }
 
+
         const data =
             event.data;
+
 
         showDebug(
             "MESSAGE RECEIVED:\n" +
@@ -450,9 +865,11 @@ window.addEventListener(
             safeDebugObject(data)
         );
 
+
         if (!data) {
             return;
         }
+
 
         if (
             typeof data ===
@@ -475,7 +892,10 @@ window.addEventListener(
             return;
         }
 
-        handleChastifyMessage(data);
+
+        handleChastifyMessage(
+            data
+        );
     }
 );
 
@@ -490,8 +910,14 @@ function handleChastifyMessage(data) {
         !data ||
         typeof data !== "object"
     ) {
+
         return;
     }
+
+
+    /*
+       Standard bridge response.
+    */
 
     if (
         data.type ===
@@ -502,27 +928,71 @@ function handleChastifyMessage(data) {
             "Chastify response received."
         );
 
+
         if (
-            data.ok &&
-            data.data
+            data.ok
         ) {
 
-            extractChastifyInformation(
-                data.data
+            if (data.data) {
+
+                extractChastifyInformation(
+                    data.data
+                );
+            }
+
+
+            setConnectionStatus(
+                true
             );
 
-            setConnectionStatus(true);
 
             showDebug(
-                "Chastify data:\n" +
+                "Chastify response data:\n" +
                 safeDebugObject(
                     data.data
                 )
             );
+
+
+            /*
+               If this was session.get, we now
+               know the bridge is working.
+            */
+
+            if (
+                data.data &&
+                (
+                    data.data.sessionId ||
+                    data.data.lockId ||
+                    data.data.lockData
+                )
+            ) {
+
+                showDebug(
+                    "Chastify session successfully received."
+                );
+            }
+
+        } else {
+
+            setConnectionStatus(
+                false
+            );
+
+            showDebug(
+                "Chastify returned an unsuccessful response:\n" +
+                safeDebugObject(data)
+            );
         }
+
 
         return;
     }
+
+
+    /*
+       Other possible Chastify event types.
+    */
 
     const messageType =
         data.type ||
@@ -530,9 +1000,11 @@ function handleChastifyMessage(data) {
         data.action ||
         data.messageType;
 
+
     if (!messageType) {
         return;
     }
+
 
     if (
         messageType ===
@@ -541,10 +1013,13 @@ function handleChastifyMessage(data) {
 
         setConnectionStatus(true);
 
-        extractChastifyInformation(data);
+        extractChastifyInformation(
+            data
+        );
 
         return;
     }
+
 
     if (
         messageType ===
@@ -553,10 +1028,13 @@ function handleChastifyMessage(data) {
 
         setConnectionStatus(true);
 
-        extractChastifyInformation(data);
+        extractChastifyInformation(
+            data
+        );
 
         return;
     }
+
 
     if (
         messageType ===
@@ -584,8 +1062,10 @@ function extractChastifyInformation(data) {
         !data ||
         typeof data !== "object"
     ) {
+
         return;
     }
+
 
     if (data.appId) {
 
@@ -593,11 +1073,13 @@ function extractChastifyInformation(data) {
             data.appId;
     }
 
+
     if (data.lockId) {
 
         gameState.lockId =
             data.lockId;
     }
+
 
     const possibleSessionIds = [
 
@@ -611,15 +1093,24 @@ function extractChastifyInformation(data) {
 
         data.data?.sessionId,
 
+        data.data?.session_id,
+
+        data.data?.session?.id,
+
+        data.data?.session?.sessionId,
+
         data.data?.id
     ];
 
+
     for (
-        const value of possibleSessionIds
+        const value of
+        possibleSessionIds
     ) {
 
         if (
-            typeof value === "string" &&
+            typeof value ===
+            "string" &&
             value.length > 0
         ) {
 
@@ -629,6 +1120,14 @@ function extractChastifyInformation(data) {
             break;
         }
     }
+
+
+    /*
+       IMPORTANT:
+       We still accept a mainToken from a Chastify
+       response if one is ever supplied, but the
+       primary source is now the iframe hash.
+    */
 
     const possibleTokens = [
 
@@ -651,12 +1150,15 @@ function extractChastifyInformation(data) {
         data.data?.token
     ];
 
+
     for (
-        const value of possibleTokens
+        const value of
+        possibleTokens
     ) {
 
         if (
-            typeof value === "string" &&
+            typeof value ===
+            "string" &&
             value.length > 0
         ) {
 
@@ -667,29 +1169,52 @@ function extractChastifyInformation(data) {
         }
     }
 
+
     showDebug(
         "Chastify connection data:\n" +
         "appId: " +
-        (gameState.appId || "NOT FOUND") +
+        (
+            gameState.appId ||
+            "NOT FOUND"
+        ) +
         "\n" +
         "lockId: " +
-        (gameState.lockId || "NOT FOUND") +
+        (
+            gameState.lockId ||
+            "NOT FOUND"
+        ) +
         "\n" +
         "sessionId: " +
-        (gameState.sessionId || "NOT FOUND") +
+        (
+            gameState.sessionId ||
+            "NOT FOUND"
+        ) +
         "\n" +
         "mainToken: " +
         (
             gameState.mainToken
                 ? "[AVAILABLE]"
                 : "NOT FOUND"
+        ) +
+        "\n" +
+        "bridge.nonce: " +
+        (
+            gameState.bridgeNonce
+                ? "[AVAILABLE]"
+                : "NOT FOUND"
+        ) +
+        "\n" +
+        "parentOrigin: " +
+        (
+            gameState.parentOrigin ||
+            "NOT FOUND"
         )
     );
 }
 
 
 /* =========================================================
-   CLOUDFLARE WORKER TEST
+   CLOUDFLARE WORKER
    ========================================================= */
 
 async function sendTimeChangeToWorker(
@@ -700,7 +1225,32 @@ async function sendTimeChangeToWorker(
     minutes =
         Math.round(minutes);
 
+
     if (!minutes) {
+
+        return false;
+    }
+
+
+    /* -----------------------------------------------------
+       CREDENTIAL CHECK
+       ----------------------------------------------------- */
+
+    if (!gameState.sessionId) {
+
+        showDebug(
+            "STOPPED: Chastify sessionId is missing."
+        );
+
+        return false;
+    }
+
+
+    if (!gameState.mainToken) {
+
+        showDebug(
+            "STOPPED: Chastify mainToken is missing."
+        );
 
         return false;
     }
@@ -712,10 +1262,14 @@ async function sendTimeChangeToWorker(
 
     showDebug(
         "=================================\n" +
-        "TESTING CLOUDFLARE CONNECTION\n" +
+        "SENDING TIME CHANGE TO CLOUDFLARE\n" +
         "=================================\n" +
         "Worker URL:\n" +
         WORKER_URL + "\n" +
+        "Session ID:\n" +
+        gameState.sessionId + "\n" +
+        "Main token:\n" +
+        "[AVAILABLE]\n" +
         "Minutes:\n" +
         minutes + "\n" +
         "Seconds:\n" +
@@ -727,41 +1281,32 @@ async function sendTimeChangeToWorker(
     );
 
 
-    /* -----------------------------------------------------
-       IMPORTANT:
-       For this diagnostic test we deliberately allow
-       placeholder values if Chastify has not provided
-       sessionId/mainToken.
-       ----------------------------------------------------- */
+    /*
+       NO GAME_TEST FALLBACK.
+    */
 
     const requestBody = {
 
         sessionId:
-            gameState.sessionId ||
-            "GAME_TEST",
+            gameState.sessionId,
 
         mainToken:
-            gameState.mainToken ||
-            "GAME_TEST",
+            gameState.mainToken,
 
         seconds:
             minutes * 60,
 
         reason:
             reason ||
-            "Lost Island TEST"
+            "Lost Island"
     };
 
 
     showDebug(
         "SENDING POST TO CLOUDFLARE:\n" +
-        safeDebugObject({
-            ...requestBody,
-            mainToken:
-                requestBody.mainToken
-                    ? "[REDACTED]"
-                    : null
-        })
+        safeDebugObject(
+            requestBody
+        )
     );
 
 
@@ -810,6 +1355,7 @@ async function sendTimeChangeToWorker(
 
         let responseData;
 
+
         try {
 
             responseData =
@@ -847,8 +1393,10 @@ async function sendTimeChangeToWorker(
                 "================================="
             );
 
+
             gameState.totalTimeChange +=
                 minutes;
+
 
             return true;
         }
@@ -857,6 +1405,7 @@ async function sendTimeChangeToWorker(
         showDebug(
             "Worker responded, but did not return ok:true."
         );
+
 
         return false;
 
@@ -889,21 +1438,26 @@ async function changeChastifyTime(
     minutes =
         Math.round(minutes);
 
+
     if (!minutes) {
         return false;
     }
+
 
     const action =
         minutes > 0
             ? "ADD"
             : "REMOVE";
 
+
     const amount =
         Math.abs(minutes);
+
 
     showDebug(
         `TIME ACTION: ${action} ${amount} minutes`
     );
+
 
     return await sendTimeChangeToWorker(
         minutes,
@@ -927,6 +1481,7 @@ function determineOutcome() {
             100
         );
 
+
     let neutralChance =
         clamp(
             Number(
@@ -935,6 +1490,7 @@ function determineOutcome() {
             0,
             100
         );
+
 
     let punishmentChance =
         clamp(
@@ -945,29 +1501,41 @@ function determineOutcome() {
             100
         );
 
+
     const total =
         rewardChance +
         neutralChance +
         punishmentChance;
 
+
     if (total <= 0) {
         return "neutral";
     }
 
-    const roll =
-        Math.random() * total;
 
-    if (roll < rewardChance) {
+    const roll =
+        Math.random() *
+        total;
+
+
+    if (
+        roll <
+        rewardChance
+    ) {
+
         return "reward";
     }
+
 
     if (
         roll <
         rewardChance +
         neutralChance
     ) {
+
         return "neutral";
     }
+
 
     return "punishment";
 }
@@ -1185,10 +1753,13 @@ function performAction(action) {
         return;
     }
 
+
     gameState.totalActions++;
+
 
     const actionEvents =
         events[action];
+
 
     const baseEvent =
         actionEvents[
@@ -1198,11 +1769,14 @@ function performAction(action) {
             )
         ];
 
+
     const rngOutcome =
         determineOutcome();
 
+
     let selectedEvent =
         baseEvent;
+
 
     if (
         rngOutcome !==
@@ -1216,7 +1790,10 @@ function performAction(action) {
                     rngOutcome
             );
 
-        if (matching.length > 0) {
+
+        if (
+            matching.length > 0
+        ) {
 
             selectedEvent =
                 matching[
@@ -1227,6 +1804,7 @@ function performAction(action) {
                 ];
         }
     }
+
 
     applyEvent(
         action,
@@ -1264,6 +1842,7 @@ async function applyEvent(
             );
     }
 
+
     if (event.water) {
 
         gameState.water =
@@ -1274,6 +1853,7 @@ async function applyEvent(
             );
     }
 
+
     if (event.food) {
 
         gameState.food =
@@ -1283,6 +1863,7 @@ async function applyEvent(
                 event.food
             );
     }
+
 
     if (event.materials) {
 
@@ -1301,6 +1882,7 @@ async function applyEvent(
 
     let timeChange =
         0;
+
 
     if (
         outcome ===
@@ -1334,7 +1916,9 @@ async function applyEvent(
         event.time !== undefined
     ) {
 
-        if (event.time < 0) {
+        if (
+            event.time < 0
+        ) {
 
             timeChange =
                 -randomNumber(
@@ -1342,7 +1926,9 @@ async function applyEvent(
                     settings.rewardMax
                 );
 
-        } else if (event.time > 0) {
+        } else if (
+            event.time > 0
+        ) {
 
             timeChange =
                 randomNumber(
@@ -1365,6 +1951,7 @@ async function applyEvent(
     let chastifyConfirmed =
         false;
 
+
     if (
         timeChange !== 0
     ) {
@@ -1383,6 +1970,7 @@ async function applyEvent(
 
     let title = "";
     let icon = "";
+
 
     if (
         outcome ===
@@ -1419,6 +2007,7 @@ async function applyEvent(
     let timeText =
         "";
 
+
     if (
         timeChange < 0
     ) {
@@ -1443,6 +2032,7 @@ async function applyEvent(
 
     let confirmationText =
         "";
+
 
     if (
         timeChange !== 0 &&
@@ -1472,14 +2062,17 @@ async function applyEvent(
             "result"
         );
 
+
     if (result) {
 
         result.className =
             `result ${outcome}`;
 
+
         result.classList.remove(
             "hidden"
         );
+
 
         result.innerHTML = `
 
@@ -1521,6 +2114,7 @@ async function applyEvent(
 
     gameState.day++;
 
+
     updateDisplay();
 }
 
@@ -1536,25 +2130,30 @@ function updateDisplay() {
             "health"
         );
 
+
     const water =
         document.getElementById(
             "water"
         );
+
 
     const food =
         document.getElementById(
             "food"
         );
 
+
     const materials =
         document.getElementById(
             "materials"
         );
 
+
     const day =
         document.getElementById(
             "day"
         );
+
 
     if (health) {
 
@@ -1562,11 +2161,13 @@ function updateDisplay() {
             gameState.health;
     }
 
+
     if (water) {
 
         water.textContent =
             gameState.water;
     }
+
 
     if (food) {
 
@@ -1574,11 +2175,13 @@ function updateDisplay() {
             gameState.food;
     }
 
+
     if (materials) {
 
         materials.textContent =
             gameState.materials;
     }
+
 
     if (day) {
 
@@ -1606,17 +2209,25 @@ function updateSettingsUI() {
         "punishmentMax"
     ];
 
+
     ids.forEach(
         id => {
 
             const element =
-                document.getElementById(id);
+                document.getElementById(
+                    id
+                );
+
 
             if (!element) {
                 return;
             }
 
-            if (id === "difficulty") {
+
+            if (
+                id ===
+                "difficulty"
+            ) {
 
                 element.value =
                     settings.difficulty;
@@ -1642,35 +2253,42 @@ function saveSettings() {
             "difficulty"
         );
 
+
     const rewardChance =
         document.getElementById(
             "rewardChance"
         );
+
 
     const neutralChance =
         document.getElementById(
             "neutralChance"
         );
 
+
     const punishmentChance =
         document.getElementById(
             "punishmentChance"
         );
+
 
     const rewardMin =
         document.getElementById(
             "rewardMin"
         );
 
+
     const rewardMax =
         document.getElementById(
             "rewardMax"
         );
 
+
     const punishmentMin =
         document.getElementById(
             "punishmentMin"
         );
+
 
     const punishmentMax =
         document.getElementById(
@@ -1684,6 +2302,7 @@ function saveSettings() {
             difficulty.value;
     }
 
+
     if (rewardChance) {
 
         settings.rewardChance =
@@ -1691,6 +2310,7 @@ function saveSettings() {
                 rewardChance.value
             );
     }
+
 
     if (neutralChance) {
 
@@ -1700,6 +2320,7 @@ function saveSettings() {
             );
     }
 
+
     if (punishmentChance) {
 
         settings.punishmentChance =
@@ -1707,6 +2328,7 @@ function saveSettings() {
                 punishmentChance.value
             );
     }
+
 
     if (rewardMin) {
 
@@ -1716,6 +2338,7 @@ function saveSettings() {
             );
     }
 
+
     if (rewardMax) {
 
         settings.rewardMax =
@@ -1723,6 +2346,7 @@ function saveSettings() {
                 rewardMax.value
             );
     }
+
 
     if (punishmentMin) {
 
@@ -1732,14 +2356,13 @@ function saveSettings() {
             );
     }
 
+
     if (punishmentMax) {
 
         settings.punishmentMax =
             Number(
                 punishmentMax.value
             );
-
-
     }
 
 
@@ -1770,6 +2393,7 @@ function saveSettings() {
             "settingsModal"
         );
 
+
     if (modal) {
 
         modal.classList.add(
@@ -1794,9 +2418,7 @@ function sendSetupConfig() {
             1,
 
         id:
-            crypto.randomUUID ?
-            crypto.randomUUID() :
-            Date.now().toString(),
+            createRequestId(),
 
         action:
             "setup.config",
@@ -1842,15 +2464,18 @@ function initializeSettings() {
             "settingsBtn"
         );
 
+
     const saveBtn =
         document.getElementById(
             "saveSettings"
         );
 
+
     const closeBtn =
         document.getElementById(
             "closeSettings"
         );
+
 
     const modal =
         document.getElementById(
@@ -1915,6 +2540,7 @@ function initializeActions() {
             ".action"
         );
 
+
     buttons.forEach(
         button => {
 
@@ -1924,6 +2550,7 @@ function initializeActions() {
 
                     const action =
                         this.dataset.action;
+
 
                     performAction(
                         action
@@ -1973,12 +2600,13 @@ function initializeGame() {
         window.parent !== window
     ) {
 
-        connectToChastify();
+        /*
+           IMPORTANT:
+           Chastify authentication now starts by
+           reading the iframe launch hash.
+        */
 
-        setTimeout(
-            requestConfig,
-            1000
-        );
+        connectToChastify();
 
     } else {
 
