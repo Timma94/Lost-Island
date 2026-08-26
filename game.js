@@ -43,7 +43,7 @@ const gameState = {
     mainToken: null,
 
     bridgeNonce: null,
-    parentOrigin: null,
+    parentOrigin: CHASTIFY_ORIGIN,
 
     lastResult: null
 };
@@ -144,6 +144,7 @@ function formatMinutes(minutes) {
     if (minutes < 60) {
 
         return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+
     }
 
     const hours =
@@ -157,6 +158,7 @@ function formatMinutes(minutes) {
         if (remainingMinutes === 0) {
 
             return `${hours} hour${hours === 1 ? "" : "s"}`;
+
         }
 
         return `${hours}h ${remainingMinutes}m`;
@@ -281,7 +283,7 @@ function createRequestId() {
         if (
             window.crypto &&
             typeof window.crypto.randomUUID ===
-            "function"
+                "function"
         ) {
 
             return window.crypto.randomUUID();
@@ -297,6 +299,423 @@ function createRequestId() {
         Math.random()
             .toString(36)
             .substring(2)
+    );
+}
+
+
+/* =========================================================
+   READ CHASTIFY IFRAME HASH
+   ========================================================= */
+
+function initializeChastifyLaunchContext() {
+
+    const hash =
+        window.location.hash || "";
+
+    showDebug(
+        "Chastify iframe hash present: " +
+        Boolean(hash)
+    );
+
+    if (!hash) {
+
+        showDebug(
+            "ERROR: No Chastify iframe hash was found."
+        );
+
+        return false;
+    }
+
+
+    let rawHash =
+        hash.substring(1);
+
+
+    /*
+       Some implementations may provide URL-encoded
+       hash content.
+    */
+
+    try {
+
+        rawHash =
+            decodeURIComponent(rawHash);
+
+    } catch (error) {
+
+        showDebug(
+            "Hash was not URL encoded or could not be decoded."
+        );
+    }
+
+
+    let launchData = null;
+
+
+    /* -----------------------------------------------------
+       Attempt JSON parsing
+       ----------------------------------------------------- */
+
+    try {
+
+        launchData =
+            JSON.parse(rawHash);
+
+    } catch (error) {
+
+        launchData = null;
+    }
+
+
+    /* -----------------------------------------------------
+       Attempt base64 JSON parsing
+       ----------------------------------------------------- */
+
+    if (!launchData) {
+
+        try {
+
+            let base64 =
+                rawHash;
+
+            if (
+                base64.startsWith("base64:")
+            ) {
+
+                base64 =
+                    base64.substring(7);
+            }
+
+            const decoded =
+                atob(base64);
+
+            launchData =
+                JSON.parse(decoded);
+
+        } catch (error) {
+
+            launchData = null;
+        }
+    }
+
+
+    /* -----------------------------------------------------
+       Attempt key=value style hash
+       ----------------------------------------------------- */
+
+    if (!launchData) {
+
+        try {
+
+            const params =
+                new URLSearchParams(rawHash);
+
+            if (
+                params.has("sessionId") ||
+                params.has("mainToken") ||
+                params.has("lockId")
+            ) {
+
+                launchData = {
+
+                    sessionId:
+                        params.get("sessionId"),
+
+                    lockId:
+                        params.get("lockId"),
+
+                    mainToken:
+                        params.get("mainToken"),
+
+                    bridge: {
+
+                        nonce:
+                            params.get("nonce"),
+
+                        parentOrigin:
+                            params.get("parentOrigin")
+                    }
+                };
+            }
+
+        } catch (error) {
+
+            launchData = null;
+        }
+    }
+
+
+    if (
+        !launchData ||
+        typeof launchData !== "object"
+    ) {
+
+        showDebug(
+            "ERROR: Could not parse Chastify iframe launch hash."
+        );
+
+        return false;
+    }
+
+
+    /*
+       Debug only the structure.
+       Never print mainToken.
+    */
+
+    showDebug(
+        "Chastify launch hash parsed:\n" +
+        safeDebugObject({
+            ...launchData,
+            mainToken:
+                launchData.mainToken
+                    ? "[AVAILABLE]"
+                    : undefined
+        })
+    );
+
+
+    /* -----------------------------------------------------
+       Extract sessionId
+       ----------------------------------------------------- */
+
+    const possibleSessionIds = [
+
+        launchData.sessionId,
+
+        launchData.session_id,
+
+        launchData.session?.id,
+
+        launchData.session?.sessionId,
+
+        launchData.context?.sessionId,
+
+        launchData.data?.sessionId,
+
+        launchData.data?.session_id,
+
+        launchData.data?.session?.id
+    ];
+
+
+    for (
+        const value of possibleSessionIds
+    ) {
+
+        if (
+            typeof value === "string" &&
+            value.length > 0
+        ) {
+
+            gameState.sessionId =
+                value;
+
+            break;
+        }
+    }
+
+
+    /* -----------------------------------------------------
+       Extract lockId
+       ----------------------------------------------------- */
+
+    const possibleLockIds = [
+
+        launchData.lockId,
+
+        launchData.lock_id,
+
+        launchData.lock?.id,
+
+        launchData.context?.lockId,
+
+        launchData.data?.lockId,
+
+        launchData.data?.lock_id,
+
+        launchData.data?.lock?.id
+    ];
+
+
+    for (
+        const value of possibleLockIds
+    ) {
+
+        if (
+            typeof value === "string" &&
+            value.length > 0
+        ) {
+
+            gameState.lockId =
+                value;
+
+            break;
+        }
+    }
+
+
+    /* -----------------------------------------------------
+       Extract mainToken
+       ----------------------------------------------------- */
+
+    const possibleTokens = [
+
+        launchData.mainToken,
+
+        launchData.main_token,
+
+        launchData.session?.mainToken,
+
+        launchData.session?.main_token,
+
+        launchData.context?.mainToken,
+
+        launchData.data?.mainToken,
+
+        launchData.data?.main_token,
+
+        launchData.data?.session?.mainToken,
+
+        launchData.data?.session?.main_token
+    ];
+
+
+    for (
+        const value of possibleTokens
+    ) {
+
+        if (
+            typeof value === "string" &&
+            value.length > 0
+        ) {
+
+            gameState.mainToken =
+                value;
+
+            break;
+        }
+    }
+
+
+    /* -----------------------------------------------------
+       Extract bridge nonce
+       ----------------------------------------------------- */
+
+    const possibleNonces = [
+
+        launchData.bridge?.nonce,
+
+        launchData.nonce,
+
+        launchData.context?.bridge?.nonce,
+
+        launchData.context?.nonce,
+
+        launchData.data?.bridge?.nonce,
+
+        launchData.data?.nonce
+    ];
+
+
+    for (
+        const value of possibleNonces
+    ) {
+
+        if (
+            typeof value === "string" &&
+            value.length > 0
+        ) {
+
+            gameState.bridgeNonce =
+                value;
+
+            break;
+        }
+    }
+
+
+    /* -----------------------------------------------------
+       Extract parent origin
+       ----------------------------------------------------- */
+
+    const possibleParentOrigins = [
+
+        launchData.bridge?.parentOrigin,
+
+        launchData.parentOrigin,
+
+        launchData.context?.bridge?.parentOrigin,
+
+        launchData.context?.parentOrigin,
+
+        launchData.data?.bridge?.parentOrigin,
+
+        launchData.data?.parentOrigin
+    ];
+
+
+    for (
+        const value of possibleParentOrigins
+    ) {
+
+        if (
+            typeof value === "string" &&
+            value.length > 0
+        ) {
+
+            gameState.parentOrigin =
+                value;
+
+            break;
+        }
+    }
+
+
+    /* -----------------------------------------------------
+       Final diagnostic
+       ----------------------------------------------------- */
+
+    showDebug(
+        "Chastify launch context:\n" +
+        "sessionId: " +
+        (
+            gameState.sessionId ||
+            "NOT FOUND"
+        ) +
+        "\n" +
+        "lockId: " +
+        (
+            gameState.lockId ||
+            "NOT FOUND"
+        ) +
+        "\n" +
+        "mainToken: " +
+        (
+            gameState.mainToken
+                ? "[AVAILABLE]"
+                : "NOT FOUND"
+        ) +
+        "\n" +
+        "bridge.nonce: " +
+        (
+            gameState.bridgeNonce
+                ? "[AVAILABLE]"
+                : "NOT FOUND"
+        ) +
+        "\n" +
+        "parentOrigin: " +
+        (
+            gameState.parentOrigin ||
+            "NOT FOUND"
+        )
+    );
+
+
+    return Boolean(
+        gameState.sessionId &&
+        gameState.mainToken &&
+        gameState.bridgeNonce
     );
 }
 
@@ -326,26 +745,16 @@ function setConnectionStatus(connected) {
 
     if (connected) {
 
-        dot.classList.remove(
-            "offline"
-        );
-
-        dot.classList.add(
-            "online"
-        );
+        dot.classList.remove("offline");
+        dot.classList.add("online");
 
         text.textContent =
             "Chastify: Connected";
 
     } else {
 
-        dot.classList.remove(
-            "online"
-        );
-
-        dot.classList.add(
-            "offline"
-        );
+        dot.classList.remove("online");
+        dot.classList.add("offline");
 
         text.textContent =
             "Chastify: Offline";
@@ -354,277 +763,10 @@ function setConnectionStatus(connected) {
 
 
 /* =========================================================
-   READ IFRAME HASH
-   ========================================================= */
-
-function readIframeHash() {
-
-    showDebug(
-        "Reading Chastify iframe launch hash..."
-    );
-
-    const rawHash =
-        window.location.hash;
-
-    if (!rawHash) {
-
-        showDebug(
-            "ERROR: No iframe hash was provided by Chastify."
-        );
-
-        return false;
-    }
-
-    showDebug(
-        "Iframe hash detected."
-    );
-
-
-    /*
-       Remove the leading "#".
-    */
-
-    let encoded =
-        rawHash.startsWith("#")
-            ? rawHash.substring(1)
-            : rawHash;
-
-
-    /*
-       Some iframe URLs may contain URL-encoded
-       JSON, while others may contain plain JSON.
-    */
-
-    let decoded;
-
-    try {
-
-        decoded =
-            decodeURIComponent(encoded);
-
-    } catch (error) {
-
-        decoded =
-            encoded;
-
-        showDebug(
-            "Hash was not URI encoded; using raw hash."
-        );
-    }
-
-
-    let hashData;
-
-    try {
-
-        hashData =
-            JSON.parse(decoded);
-
-    } catch (error) {
-
-        showDebug(
-            "ERROR: Could not parse iframe hash as JSON.\n" +
-            error.message
-        );
-
-        return false;
-    }
-
-
-    if (
-        !hashData ||
-        typeof hashData !== "object"
-    ) {
-
-        showDebug(
-            "ERROR: Iframe hash did not contain an object."
-        );
-
-        return false;
-    }
-
-
-    /*
-       Store application/session information.
-    */
-
-    if (hashData.appId) {
-
-        gameState.appId =
-            hashData.appId;
-    }
-
-    if (hashData.lockId) {
-
-        gameState.lockId =
-            hashData.lockId;
-    }
-
-    if (hashData.sessionId) {
-
-        gameState.sessionId =
-            hashData.sessionId;
-    }
-
-
-    /*
-       MAIN TOKEN
-       This is the important authentication value.
-    */
-
-    if (hashData.mainToken) {
-
-        gameState.mainToken =
-            hashData.mainToken;
-    }
-
-
-    /*
-       Bridge information.
-    */
-
-    if (
-        hashData.bridge &&
-        typeof hashData.bridge === "object"
-    ) {
-
-        if (hashData.bridge.nonce) {
-
-            gameState.bridgeNonce =
-                hashData.bridge.nonce;
-        }
-
-        if (hashData.bridge.parentOrigin) {
-
-            gameState.parentOrigin =
-                hashData.bridge.parentOrigin;
-        }
-    }
-
-
-    /*
-       Some versions/formats may expose bridge values
-       at the top level. Accept those as a fallback.
-    */
-
-    if (
-        !gameState.bridgeNonce &&
-        hashData.nonce
-    ) {
-
-        gameState.bridgeNonce =
-            hashData.nonce;
-    }
-
-    if (
-        !gameState.parentOrigin &&
-        hashData.parentOrigin
-    ) {
-
-        gameState.parentOrigin =
-            hashData.parentOrigin;
-    }
-
-
-    /*
-       DO NOT print the actual mainToken.
-    */
-
-    showDebug(
-        "Chastify iframe authentication data:\n" +
-        "appId: " +
-        (
-            gameState.appId ||
-            "NOT FOUND"
-        ) +
-        "\n" +
-        "lockId: " +
-        (
-            gameState.lockId ||
-            "NOT FOUND"
-        ) +
-        "\n" +
-        "sessionId: " +
-        (
-            gameState.sessionId ||
-            "NOT FOUND"
-        ) +
-        "\n" +
-        "mainToken: " +
-        (
-            gameState.mainToken
-                ? "[AVAILABLE]"
-                : "NOT FOUND"
-        ) +
-        "\n" +
-        "bridge.nonce: " +
-        (
-            gameState.bridgeNonce
-                ? "[AVAILABLE]"
-                : "NOT FOUND"
-        ) +
-        "\n" +
-        "bridge.parentOrigin: " +
-        (
-            gameState.parentOrigin ||
-            "NOT FOUND"
-        )
-    );
-
-
-    /*
-       Validate the values required for the bridge.
-    */
-
-    if (!gameState.sessionId) {
-
-        showDebug(
-            "ERROR: sessionId was not found in iframe hash."
-        );
-
-        return false;
-    }
-
-    if (!gameState.mainToken) {
-
-        showDebug(
-            "ERROR: mainToken was not found in iframe hash."
-        );
-
-        return false;
-    }
-
-    if (!gameState.bridgeNonce) {
-
-        showDebug(
-            "ERROR: bridge.nonce was not found in iframe hash."
-        );
-
-        return false;
-    }
-
-    if (!gameState.parentOrigin) {
-
-        showDebug(
-            "ERROR: bridge.parentOrigin was not found in iframe hash."
-        );
-
-        return false;
-    }
-
-
-    return true;
-}
-
-
-/* =========================================================
    SEND MESSAGE TO CHASTIFY
    ========================================================= */
 
-function sendToChastify(
-    message,
-    targetOrigin
-) {
+function sendToChastify(message) {
 
     try {
 
@@ -641,38 +783,43 @@ function sendToChastify(
         }
 
 
-        const destination =
-            targetOrigin ||
-            gameState.parentOrigin ||
-            CHASTIFY_ORIGIN;
+        if (
+            !gameState.bridgeNonce
+        ) {
+
+            showDebug(
+                "Cannot send Chastify message: " +
+                "bridge nonce is missing."
+            );
+
+            return false;
+        }
 
 
-        /*
-           Add nonce to every bridge request.
-
-           The nonce comes from the iframe launch hash.
-        */
-
-        const messageToSend = {
+        const messageWithNonce = {
 
             ...message,
 
             nonce:
-                message.nonce ||
                 gameState.bridgeNonce
         };
 
 
+        const targetOrigin =
+            gameState.parentOrigin ||
+            CHASTIFY_ORIGIN;
+
+
         window.parent.postMessage(
-            messageToSend,
-            destination
+            messageWithNonce,
+            targetOrigin
         );
 
 
         showDebug(
             "SENT TO CHASTIFY:\n" +
             safeDebugObject(
-                messageToSend
+                messageWithNonce
             )
         );
 
@@ -692,56 +839,6 @@ function sendToChastify(
 
 
 /* =========================================================
-   REQUEST SESSION
-   ========================================================= */
-
-function requestSession() {
-
-    if (!gameState.sessionId) {
-
-        showDebug(
-            "Cannot request session: sessionId missing."
-        );
-
-        return;
-    }
-
-    if (!gameState.bridgeNonce) {
-
-        showDebug(
-            "Cannot request session: bridge nonce missing."
-        );
-
-        return;
-    }
-
-
-    showDebug(
-        "Requesting Chastify session information..."
-    );
-
-
-    sendToChastify({
-
-        type:
-            "chastify:ext:req",
-
-        v:
-            1,
-
-        id:
-            createRequestId(),
-
-        action:
-            "session.get",
-
-        payload:
-            {}
-    });
-}
-
-
-/* =========================================================
    CONNECT TO CHASTIFY
    ========================================================= */
 
@@ -752,35 +849,39 @@ function connectToChastify() {
     );
 
 
-    /*
-       Step 1:
-       Read authentication information from
-       the iframe launch hash.
-    */
-
-    const hashValid =
-        readIframeHash();
-
-
-    if (!hashValid) {
-
-        setConnectionStatus(false);
+    if (
+        !gameState.bridgeNonce
+    ) {
 
         showDebug(
-            "Chastify authentication data is incomplete."
+            "Cannot connect: bridge.nonce is missing."
         );
 
-        return;
+        return false;
     }
 
 
-    /*
-       Step 2:
-       Ask the Chastify parent for the current
-       session using the launch nonce.
-    */
+    const requestId =
+        createRequestId();
 
-    requestSession();
+
+    return sendToChastify({
+
+        type:
+            "chastify:ext:req",
+
+        v:
+            1,
+
+        id:
+            requestId,
+
+        action:
+            "setup.init",
+
+        payload:
+            {}
+    });
 }
 
 
@@ -790,20 +891,28 @@ function connectToChastify() {
 
 function requestConfig() {
 
-    /*
-       setup.get_config is only relevant when the
-       extension has a setup/configuration page.
-
-       We keep this because your existing extension
-       already uses it.
-    */
-
     showDebug(
         "Requesting current Chastify configuration..."
     );
 
 
-    sendToChastify({
+    if (
+        !gameState.bridgeNonce
+    ) {
+
+        showDebug(
+            "Cannot request config: bridge.nonce is missing."
+        );
+
+        return false;
+    }
+
+
+    const requestId =
+        createRequestId();
+
+
+    return sendToChastify({
 
         type:
             "chastify:ext:req",
@@ -812,7 +921,7 @@ function requestConfig() {
             1,
 
         id:
-            createRequestId(),
+            requestId,
 
         action:
             "setup.get_config",
@@ -831,24 +940,10 @@ window.addEventListener(
     "message",
     function(event) {
 
-        /*
-           Only accept messages from the Chastify
-           parent origin.
-
-           If Chastify supplied a parentOrigin in
-           the iframe hash, prefer that.
-        */
-
-        const expectedOrigin =
-            gameState.parentOrigin ||
-            CHASTIFY_ORIGIN;
-
-
         if (
             event.origin !==
-            expectedOrigin
+            CHASTIFY_ORIGIN
         ) {
-
             return;
         }
 
@@ -893,9 +988,7 @@ window.addEventListener(
         }
 
 
-        handleChastifyMessage(
-            data
-        );
+        handleChastifyMessage(data);
     }
 );
 
@@ -910,14 +1003,9 @@ function handleChastifyMessage(data) {
         !data ||
         typeof data !== "object"
     ) {
-
         return;
     }
 
-
-    /*
-       Standard bridge response.
-    */
 
     if (
         data.type ===
@@ -930,58 +1018,23 @@ function handleChastifyMessage(data) {
 
 
         if (
-            data.ok
+            data.ok &&
+            data.data
         ) {
 
-            if (data.data) {
-
-                extractChastifyInformation(
-                    data.data
-                );
-            }
-
-
-            setConnectionStatus(
-                true
+            extractChastifyInformation(
+                data.data
             );
 
 
+            setConnectionStatus(true);
+
+
             showDebug(
-                "Chastify response data:\n" +
+                "Chastify data:\n" +
                 safeDebugObject(
                     data.data
                 )
-            );
-
-
-            /*
-               If this was session.get, we now
-               know the bridge is working.
-            */
-
-            if (
-                data.data &&
-                (
-                    data.data.sessionId ||
-                    data.data.lockId ||
-                    data.data.lockData
-                )
-            ) {
-
-                showDebug(
-                    "Chastify session successfully received."
-                );
-            }
-
-        } else {
-
-            setConnectionStatus(
-                false
-            );
-
-            showDebug(
-                "Chastify returned an unsuccessful response:\n" +
-                safeDebugObject(data)
             );
         }
 
@@ -989,10 +1042,6 @@ function handleChastifyMessage(data) {
         return;
     }
 
-
-    /*
-       Other possible Chastify event types.
-    */
 
     const messageType =
         data.type ||
@@ -1013,9 +1062,7 @@ function handleChastifyMessage(data) {
 
         setConnectionStatus(true);
 
-        extractChastifyInformation(
-            data
-        );
+        extractChastifyInformation(data);
 
         return;
     }
@@ -1028,9 +1075,7 @@ function handleChastifyMessage(data) {
 
         setConnectionStatus(true);
 
-        extractChastifyInformation(
-            data
-        );
+        extractChastifyInformation(data);
 
         return;
     }
@@ -1062,7 +1107,6 @@ function extractChastifyInformation(data) {
         !data ||
         typeof data !== "object"
     ) {
-
         return;
     }
 
@@ -1097,20 +1141,16 @@ function extractChastifyInformation(data) {
 
         data.data?.session?.id,
 
-        data.data?.session?.sessionId,
-
-        data.data?.id
+        data.data?.session?.sessionId
     ];
 
 
     for (
-        const value of
-        possibleSessionIds
+        const value of possibleSessionIds
     ) {
 
         if (
-            typeof value ===
-            "string" &&
+            typeof value === "string" &&
             value.length > 0
         ) {
 
@@ -1121,13 +1161,6 @@ function extractChastifyInformation(data) {
         }
     }
 
-
-    /*
-       IMPORTANT:
-       We still accept a mainToken from a Chastify
-       response if one is ever supplied, but the
-       primary source is now the iframe hash.
-    */
 
     const possibleTokens = [
 
@@ -1147,18 +1180,18 @@ function extractChastifyInformation(data) {
 
         data.data?.main_token,
 
-        data.data?.token
+        data.data?.token,
+
+        data.data?.accessToken
     ];
 
 
     for (
-        const value of
-        possibleTokens
+        const value of possibleTokens
     ) {
 
         if (
-            typeof value ===
-            "string" &&
+            typeof value === "string" &&
             value.length > 0
         ) {
 
@@ -1202,12 +1235,6 @@ function extractChastifyInformation(data) {
             gameState.bridgeNonce
                 ? "[AVAILABLE]"
                 : "NOT FOUND"
-        ) +
-        "\n" +
-        "parentOrigin: " +
-        (
-            gameState.parentOrigin ||
-            "NOT FOUND"
         )
     );
 }
@@ -1233,10 +1260,12 @@ async function sendTimeChangeToWorker(
 
 
     /* -----------------------------------------------------
-       CREDENTIAL CHECK
+       REQUIRE REAL CHASTIFY AUTHENTICATION
        ----------------------------------------------------- */
 
-    if (!gameState.sessionId) {
+    if (
+        !gameState.sessionId
+    ) {
 
         showDebug(
             "STOPPED: Chastify sessionId is missing."
@@ -1246,7 +1275,9 @@ async function sendTimeChangeToWorker(
     }
 
 
-    if (!gameState.mainToken) {
+    if (
+        !gameState.mainToken
+    ) {
 
         showDebug(
             "STOPPED: Chastify mainToken is missing."
@@ -1268,8 +1299,6 @@ async function sendTimeChangeToWorker(
         WORKER_URL + "\n" +
         "Session ID:\n" +
         gameState.sessionId + "\n" +
-        "Main token:\n" +
-        "[AVAILABLE]\n" +
         "Minutes:\n" +
         minutes + "\n" +
         "Seconds:\n" +
@@ -1280,10 +1309,6 @@ async function sendTimeChangeToWorker(
         "================================="
     );
 
-
-    /*
-       NO GAME_TEST FALLBACK.
-    */
 
     const requestBody = {
 
@@ -1420,6 +1445,7 @@ async function sendTimeChangeToWorker(
             "\n" +
             error.message
         );
+
 
         return false;
     }
@@ -1791,9 +1817,7 @@ function performAction(action) {
             );
 
 
-        if (
-            matching.length > 0
-        ) {
+        if (matching.length > 0) {
 
             selectedEvent =
                 matching[
@@ -2214,9 +2238,7 @@ function updateSettingsUI() {
         id => {
 
             const element =
-                document.getElementById(
-                    id
-                );
+                document.getElementById(id);
 
 
             if (!element) {
@@ -2373,7 +2395,8 @@ function saveSettings() {
 
 
     if (
-        total !== 100
+        total !==
+        100
     ) {
 
         alert(
@@ -2600,13 +2623,28 @@ function initializeGame() {
         window.parent !== window
     ) {
 
-        /*
-           IMPORTANT:
-           Chastify authentication now starts by
-           reading the iframe launch hash.
-        */
+        const launchContextFound =
+            initializeChastifyLaunchContext();
 
-        connectToChastify();
+
+        if (
+            launchContextFound
+        ) {
+
+            connectToChastify();
+
+
+            setTimeout(
+                requestConfig,
+                1000
+            );
+
+        } else {
+
+            showDebug(
+                "Chastify launch authentication was not found."
+            );
+        }
 
     } else {
 
