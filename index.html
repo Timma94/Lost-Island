@@ -1,12 +1,1730 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lost Island</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lost Island</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #0d1512;
+    color: #f2f5f3;
+}
+
+button {
+    font: inherit;
+}
+
+#app {
+    max-width: 700px;
+    margin: auto;
+    min-height: 100vh;
+    padding: 16px;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.logo {
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.day {
+    font-size: 14px;
+    opacity: .75;
+}
+
+.settings-button {
+    background: #1b2823;
+    border: 1px solid #33453d;
+    color: white;
+    border-radius: 10px;
+    padding: 8px 11px;
+    cursor: pointer;
+}
+
+.card {
+    background: #16211d;
+    border: 1px solid #293a33;
+    border-radius: 16px;
+    padding: 18px;
+    margin-bottom: 14px;
+}
+
+.stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.stat {
+    background: #101915;
+    border-radius: 12px;
+    padding: 10px;
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 21px;
+    font-weight: bold;
+}
+
+.stat-label {
+    font-size: 12px;
+    opacity: .7;
+    margin-top: 3px;
+}
+
+.resources {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+
+.resource {
+    background: #101915;
+    border-radius: 10px;
+    padding: 10px;
+}
+
+.resource strong {
+    display: block;
+    margin-bottom: 3px;
+}
+
+.actions {
+    display: grid;
+    gap: 9px;
+}
+
+.action-button {
+    width: 100%;
+    padding: 14px;
+    border-radius: 11px;
+    border: 1px solid #3a5047;
+    background: #1c2b25;
+    color: white;
+    cursor: pointer;
+    text-align: left;
+}
+
+.action-button:hover {
+    background: #24372f;
+}
+
+.action-button:disabled {
+    opacity: .35;
+    cursor: not-allowed;
+}
+
+.action-title {
+    font-weight: bold;
+}
+
+.action-description {
+    font-size: 12px;
+    opacity: .7;
+    margin-top: 3px;
+}
+
+.notice {
+    padding: 14px;
+    border-radius: 12px;
+    background: #1e2d26;
+    margin-bottom: 12px;
+    line-height: 1.5;
+}
+
+.event-title {
+    font-size: 22px;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.choice {
+    width: 100%;
+    margin-top: 9px;
+    padding: 13px;
+    border-radius: 10px;
+    border: 1px solid #41584d;
+    background: #1a2822;
+    color: white;
+    cursor: pointer;
+}
+
+.choice:hover {
+    background: #263b31;
+}
+
+.hidden {
+    display: none;
+}
+
+.overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 10;
+}
+
+.modal {
+    width: 100%;
+    max-width: 500px;
+    background: #16211d;
+    border: 1px solid #34483f;
+    border-radius: 16px;
+    padding: 20px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.setting-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin: 12px 0;
+}
+
+.setting-row input {
+    width: 100px;
+    background: #0d1512;
+    color: white;
+    border: 1px solid #3b5147;
+    border-radius: 8px;
+    padding: 8px;
+}
+
+.primary {
+    width: 100%;
+    padding: 13px;
+    border: 0;
+    border-radius: 10px;
+    background: #d7a84d;
+    color: #111;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 10px;
+}
+
+.secondary {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #41584d;
+    border-radius: 10px;
+    background: transparent;
+    color: white;
+    cursor: pointer;
+    margin-top: 8px;
+}
+
+.result {
+    text-align: center;
+}
+
+.result-time {
+    font-size: 30px;
+    font-weight: bold;
+    margin: 20px 0;
+}
+
+.warning {
+    background: #3b241e;
+    border: 1px solid #704033;
+}
+
+.success {
+    background: #203629;
+    border: 1px solid #385c43;
+}
+
+.locked {
+    opacity: .55;
+}
+
+@media (max-width: 480px) {
+    #app {
+        padding: 10px;
+    }
+
+    .stats {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .stat-value {
+        font-size: 18px;
+    }
+}
+</style>
 </head>
+
 <body>
-    <h1>🏝️ Lost Island</h1>
-    <p>Survival Island is loading...</p>
+
+<div id="app">
+
+<header>
+    <div>
+        <div class="logo">🏝️ Lost Island</div>
+        <div class="day" id="dayText">Day 1 / 7</div>
+    </div>
+
+    <button class="settings-button" onclick="openSettings()">⚙️</button>
+</header>
+
+<div id="gameArea"></div>
+
+</div>
+
+<div id="settingsOverlay" class="overlay hidden">
+    <div class="modal">
+
+        <h2>⚙️ Game Settings</h2>
+
+        <p style="opacity:.7">
+            Time values are in minutes.
+            Negative values remove time.
+            Positive values add time.
+        </p>
+
+        <div id="settingsForm"></div>
+
+        <button class="primary" onclick="saveSettings()">
+            Save settings
+        </button>
+
+        <button class="secondary" onclick="closeSettings()">
+            Cancel
+        </button>
+
+    </div>
+</div>
+
+<script>
+
+/* =========================================================
+   SURVIVAL ISLAND
+   VERSION 1
+   ========================================================= */
+
+
+/* =========================================================
+   EASY-TO-CHANGE TIME SETTINGS
+
+   Negative = remove lock time
+   Positive = add lock time
+
+   CHANGE THESE VALUES ONLY IF YOU WANT TO BALANCE TIME.
+   ========================================================= */
+
+const DEFAULT_TIME_SETTINGS = {
+
+    perfectRescue: -60,
+    normalRescue: -45,
+    signalFireRescue: -30,
+    barelySurvived: -10,
+
+    death: 30,
+
+    failurePenalty: 180,
+
+    luckySmall: -5,
+    luckyLarge: -10,
+
+    setbackSmall: 5,
+    setbackLarge: 10,
+
+    majorSuccess: -20,
+    majorFailure: 30
+};
+
+
+/* =========================================================
+   GAME STATE
+   ========================================================= */
+
+let state = {
+
+    version: 1,
+
+    day: 1,
+
+    actionsRemaining: 3,
+
+    health: 100,
+
+    food: 3,
+    water: 3,
+
+    wood: 0,
+    materials: 0,
+
+    hasShelter: false,
+    hasFire: false,
+
+    hasContainer: false,
+    hasRadio: false,
+    hasBattery: false,
+    radioRepaired: false,
+
+    locations: {
+        beach: true,
+        jungle: false,
+        cave: false,
+        wreckage: false,
+        radioTower: false
+    },
+
+    flags: {
+        freshwater: false,
+        survivorClues: 0,
+        successfulSignalFire: false
+    },
+
+    eventsSeen: [],
+
+    totalTimeChange: 0,
+
+    gameStatus: "playing",
+
+    result: null,
+
+    settings: {
+        ...DEFAULT_TIME_SETTINGS
+    }
+};
+
+
+/* =========================================================
+   SAVE / LOAD
+   ========================================================= */
+
+function saveGame() {
+    localStorage.setItem(
+        "lostIslandSave",
+        JSON.stringify(state)
+    );
+}
+
+
+function loadGame() {
+
+    const saved = localStorage.getItem("lostIslandSave");
+
+    if (!saved) return;
+
+    try {
+
+        const loaded = JSON.parse(saved);
+
+        state = {
+            ...state,
+            ...loaded,
+            settings: {
+                ...DEFAULT_TIME_SETTINGS,
+                ...(loaded.settings || {})
+            }
+        };
+
+    } catch (error) {
+
+        console.error("Save could not be loaded.");
+
+    }
+}
+
+
+/* =========================================================
+   TIME EVENT
+   ========================================================= */
+
+function applyTimeChange(minutes, reason) {
+
+    state.totalTimeChange += minutes;
+
+    if (minutes < 0) {
+
+        showNotice(
+            "🎁 Good fortune!",
+            `${reason}<br><br><strong>${formatTime(minutes)}</strong>`
+        );
+
+    } else if (minutes > 0) {
+
+        showNotice(
+            "⚠️ Setback!",
+            `${reason}<br><br><strong>${formatTime(minutes)}</strong>`
+        );
+    }
+
+    saveGame();
+}
+
+
+function formatTime(minutes) {
+
+    if (minutes < 0) {
+
+        return `${minutes} minutes`;
+
+    }
+
+    return `+${minutes} minutes`;
+}
+
+
+/* =========================================================
+   NOTICE
+   ========================================================= */
+
+let temporaryNotice = "";
+
+
+function showNotice(title, text) {
+
+    temporaryNotice = `
+        <div class="notice">
+            <div class="event-title">${title}</div>
+            <div>${text}</div>
+        </div>
+    `;
+
+    render();
+}
+
+
+/* =========================================================
+   RENDER
+   ========================================================= */
+
+function render() {
+
+    document.getElementById("dayText").textContent =
+        `Day ${state.day} / 7`;
+
+    const area = document.getElementById("gameArea");
+
+    if (state.gameStatus === "finished") {
+
+        renderResult(area);
+        return;
+    }
+
+    area.innerHTML = `
+
+        ${temporaryNotice}
+
+        <div class="card">
+
+            <div class="stats">
+
+                <div class="stat">
+                    <div class="stat-value">❤️ ${state.health}</div>
+                    <div class="stat-label">Health</div>
+                </div>
+
+                <div class="stat">
+                    <div class="stat-value">💧 ${state.water}</div>
+                    <div class="stat-label">Water</div>
+                </div>
+
+                <div class="stat">
+                    <div class="stat-value">🍖 ${state.food}</div>
+                    <div class="stat-label">Food</div>
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="resources">
+
+                <div class="resource">
+                    <strong>🪵 Wood</strong>
+                    ${state.wood}
+                </div>
+
+                <div class="resource">
+                    <strong>🧱 Materials</strong>
+                    ${state.materials}
+                </div>
+
+                <div class="resource">
+                    <strong>🏕️ Shelter</strong>
+                    ${state.hasShelter ? "Built" : "None"}
+                </div>
+
+                <div class="resource">
+                    <strong>🔥 Fire</strong>
+                    ${state.hasFire ? "Built" : "None"}
+                </div>
+
+            </div>
+
+        </div>
+
+
+        ${renderLocations()}
+
+
+        <div class="card">
+
+            <h3>
+                What will you do?
+            </h3>
+
+            <p style="opacity:.7">
+                Actions remaining:
+                <strong>${state.actionsRemaining}</strong>
+            </p>
+
+            <div class="actions">
+
+                ${actionButton(
+                    "🌴",
+                    "Search for food",
+                    "Look for something edible.",
+                    "food"
+                )}
+
+                ${actionButton(
+                    "💧",
+                    "Search for water",
+                    "Look for a reliable water source.",
+                    "water"
+                )}
+
+                ${actionButton(
+                    "🪵",
+                    "Gather materials",
+                    "Collect wood and useful materials.",
+                    "materials"
+                )}
+
+                ${actionButton(
+                    "🏕️",
+                    "Build shelter",
+                    "Requires 5 wood.",
+                    "shelter",
+                    state.hasShelter || state.wood < 5
+                )}
+
+                ${actionButton(
+                    "🔥",
+                    "Build fire",
+                    "Requires 3 wood and 1 material.",
+                    "fire",
+                    state.hasFire || state.wood < 3 || state.materials < 1
+                )}
+
+                ${actionButton(
+                    "🗺️",
+                    "Explore",
+                    "Discover new areas and events.",
+                    "explore"
+                )}
+
+                ${state.locations.cave ? actionButton(
+                    "🕳️",
+                    "Explore cave",
+                    "Search the mysterious cave.",
+                    "cave"
+                ) : ""}
+
+                ${state.locations.wreckage ? actionButton(
+                    "⚓",
+                    "Search wreckage",
+                    "Search the remains of the wreck.",
+                    "wreckage"
+                ) : ""}
+
+                ${state.locations.radioTower ? actionButton(
+                    "📻",
+                    state.radioRepaired
+                        ? "Radio repaired"
+                        : "Repair radio",
+                    "Requires radio, battery and 2 materials.",
+                    "radio",
+                    state.radioRepaired ||
+                    !state.hasRadio ||
+                    !state.hasBattery ||
+                    state.materials < 2
+                ) : ""}
+
+            </div>
+
+        </div>
+
+    `;
+
+    temporaryNotice = "";
+}
+
+
+function actionButton(
+    icon,
+    title,
+    description,
+    action,
+    disabled = false
+) {
+
+    return `
+        <button
+            class="action-button"
+            onclick="performAction('${action}')"
+            ${disabled || state.actionsRemaining <= 0 ? "disabled" : ""}
+        >
+
+            <div class="action-title">
+                ${icon} ${title}
+            </div>
+
+            <div class="action-description">
+                ${description}
+            </div>
+
+        </button>
+    `;
+}
+
+
+function renderLocations() {
+
+    const locations = [];
+
+    if (state.locations.beach)
+        locations.push("🏖️ Beach");
+
+    if (state.locations.jungle)
+        locations.push("🌴 Jungle");
+
+    if (state.locations.cave)
+        locations.push("🕳️ Cave");
+
+    if (state.locations.wreckage)
+        locations.push("⚓ Wreckage");
+
+    if (state.locations.radioTower)
+        locations.push("📻 Radio Tower");
+
+    return `
+        <div class="card">
+            <strong>📍 Known locations</strong>
+            <div style="margin-top:8px;opacity:.8">
+                ${locations.join(" · ")}
+            </div>
+        </div>
+    `;
+}
+
+
+/* =========================================================
+   ACTION SYSTEM
+   ========================================================= */
+
+function performAction(action) {
+
+    if (state.gameStatus !== "playing") return;
+
+    if (state.actionsRemaining <= 0) return;
+
+    state.actionsRemaining--;
+
+    switch (action) {
+
+        case "food":
+            searchFood();
+            break;
+
+        case "water":
+           searchWater();
+            break;
+
+        case "materials":
+            gatherMaterials();
+            break;
+
+        case "shelter":
+            buildShelter();
+            break;
+
+        case "fire":
+            buildFire();
+            break;
+
+        case "explore":
+            explore();
+            break;
+
+        case "cave":
+            exploreCave();
+            break;
+
+        case "wreckage":
+            searchWreckage();
+            break;
+
+        case "radio":
+            repairRadio();
+            break;
+    }
+
+    saveGame();
+
+    if (state.health <= 0) {
+
+        finishGame("death");
+        return;
+    }
+
+    if (state.actionsRemaining === 0) {
+
+        night();
+
+        return;
+    }
+
+    render();
+}
+
+
+/* =========================================================
+   FOOD
+   ========================================================= */
+
+function searchFood() {
+
+    const roll = Math.random();
+
+    if (roll < .45) {
+
+        state.food += 2;
+
+        showNotice(
+            "🥥 Lucky find!",
+            "You discover a fallen coconut tree.<br><br>🍖 Food +2"
+        );
+
+    } else if (roll < .70) {
+
+        state.food += 1;
+
+        showNotice(
+            "🍓 Berries",
+            "You find edible berries.<br><br>🍖 Food +1"
+        );
+
+    } else if (roll < .85) {
+
+        state.health -= 10;
+
+        showNotice(
+            "🐍 Bad luck!",
+            "Something bites you while searching through the vegetation.<br><br>❤️ Health -10"
+        );
+
+    } else if (roll < .95) {
+
+        state.food += 4;
+
+        applyTimeChange(
+            state.settings.luckySmall,
+            "You discover an abandoned emergency food cache."
+        );
+
+        showNotice(
+            "🎁 Incredible find!",
+            "You discover an old emergency food cache.<br><br>🍖 Food +4"
+        );
+
+    } else {
+
+        showNotice(
+            "🌴 Nothing useful",
+            "You search carefully but find nothing."
+        );
+    }
+}
+
+
+/* =========================================================
+   WATER
+   ========================================================= */
+
+function searchWater() {
+
+    const roll = Math.random();
+
+    if (roll < .35) {
+
+        state.water += 2;
+
+        showNotice(
+            "💧 Fresh water!",
+            "You discover a small freshwater stream.<br><br>💧 Water +2"
+        );
+
+        state.flags.freshwater = true;
+
+    } else if (roll < .55) {
+
+        state.water += 1;
+
+        showNotice(
+            "🥥 Coconut water",
+            "You find a few fresh coconuts.<br><br>💧 Water +1"
+        );
+
+    } else if (roll < .70 && !state.hasContainer) {
+
+        state.hasContainer = true;
+
+        showNotice(
+            "🪣 Useful discovery",
+            "You discover an old container that can hold water."
+        );
+
+    } else if (roll < .85) {
+
+        state.health -= 10;
+
+        showNotice(
+            "⚠️ Contaminated water",
+            "The water looks safe, but it makes you sick.<br><br>❤️ Health -10"
+        );
+
+    } else {
+
+        showNotice(
+            "💧 Nothing",
+            "You cannot find a usable water source."
+        );
+    }
+}
+
+
+/* =========================================================
+   MATERIALS
+   ========================================================= */
+
+function gatherMaterials() {
+
+    const roll = Math.random();
+
+    if (roll < .55) {
+
+        state.wood += 2;
+
+        showNotice(
+            "🪵 Good haul",
+            "You find plenty of usable wood.<br><br>🪵 Wood +2"
+        );
+
+    } else if (roll < .75) {
+
+        state.materials += 2;
+
+        showNotice(
+            "🧱 Useful materials",
+            "You discover metal and other useful materials.<br><br>🧱 Materials +2"
+        );
+
+    } else if (roll < .90) {
+
+        state.wood += 1;
+        state.materials += 1;
+
+        showNotice(
+            "🪵 Useful find",
+            "You collect wood and materials."
+        );
+
+    } else {
+
+        state.health -= 10;
+
+        showNotice(
+            "💥 Accident",
+            "A branch breaks while you are collecting wood.<br><br>❤️ Health -10"
+        );
+    }
+}
+
+
+/* =========================================================
+   SHELTER
+   ========================================================= */
+
+function buildShelter() {
+
+    if (state.wood < 5) return;
+
+    state.wood -= 5;
+    state.hasShelter = true;
+
+    showNotice(
+        "🏕️ Shelter built",
+        "You finally have somewhere to hide from the elements."
+    );
+
+    applyTimeChange(
+        state.settings.majorSuccess,
+        "Building a proper shelter is a major survival achievement."
+    );
+}
+
+
+/* =========================================================
+   FIRE
+   ========================================================= */
+
+function buildFire() {
+
+    if (
+        state.hasFire ||
+        state.wood < 3 ||
+        state.materials < 1
+    ) return;
+
+    state.wood -= 3;
+    state.materials -= 1;
+
+    state.hasFire = true;
+
+    showNotice(
+        "🔥 Fire!",
+        "You manage to build a reliable fire."
+    );
+}
+
+
+/* =========================================================
+   EXPLORATION
+   ========================================================= */
+
+function explore() {
+
+    const roll = Math.random();
+
+    if (!state.locations.jungle && roll < .45) {
+
+        state.locations.jungle = true;
+
+        showNotice(
+            "🌴 Jungle discovered",
+            "You discover a dense jungle beyond the beach."
+        );
+
+    } else if (
+        state.locations.jungle &&
+        !state.locations.cave &&
+        roll < .45
+    ) {
+
+        state.locations.cave = true;
+
+        showNotice(
+            "🕳️ Cave discovered",
+            "Behind the jungle you discover a dark cave."
+        );
+
+    } else if (
+        !state.locations.wreckage &&
+        roll < .65
+    ) {
+
+        state.locations.wreckage = true;
+
+        showNotice(
+            "⚓ Wreckage!",
+            "You discover the remains of an old shipwreck."
+        );
+
+    } else if (
+        !state.locations.radioTower &&
+        state.day >= 5 &&
+        roll < .75
+    ) {
+
+        state.locations.radioTower = true;
+
+        showNotice(
+            "📻 Radio tower",
+            "From the hills you spot an old radio tower."
+        );
+
+    } else if (roll < .85) {
+
+        state.flags.survivorClues++;
+
+        showNotice(
+            "👣 Strange footprints",
+            "You find footprints that don't appear to be yours."
+        );
+
+    } else {
+
+        state.health -= 15;
+
+        showNotice(
+            "⚠️ Dangerous terrain",
+            "You slip while exploring.<br><br>❤️ Health -15"
+        );
+    }
+}
+
+
+/* =========================================================
+   CAVE
+   ========================================================= */
+
+function exploreCave() {
+
+    const roll = Math.random();
+
+    if (roll < .30) {
+
+        state.water += 3;
+
+        showNotice(
+            "💧 Underground water",
+            "You discover a clean underground pool.<br><br>💧 Water +3"
+        );
+
+    } else if (roll < .55) {
+
+        state.materials += 3;
+
+        showNotice(
+            "🧱 Valuable materials",
+            "You discover useful metal inside the cave.<br><br>🧱 Materials +3"
+        );
+
+    } else if (roll < .70 && !state.hasBattery) {
+
+        state.hasBattery = true;
+
+        showNotice(
+            "🔋 Battery found!",
+            "You discover an old but potentially usable battery."
+        );
+
+    } else if (roll < .85) {
+
+        state.health -= 20;
+
+        showNotice(
+            "🪨 Cave collapse",
+            "Part of the cave gives way.<br><br>❤️ Health -20"
+        );
+
+    } else {
+
+        state.materials += 2;
+
+        showNotice(
+            "💎 Hidden cache",
+            "Someone once stored supplies here.<br><br>🧱 Materials +2"
+        );
+    }
+}
+
+
+/* =========================================================
+   WRECKAGE
+   ========================================================= */
+
+function searchWreckage() {
+
+    const roll = Math.random();
+
+    if (!state.hasRadio && roll < .35) {
+
+        state.hasRadio = true;
+
+        showNotice(
+            "📻 Radio discovered",
+            "You find an emergency radio among the wreckage."
+        );
+
+    } else if (!state.hasBattery && roll < .55) {
+
+        state.hasBattery = true;
+
+        showNotice(
+            "🔋 Battery discovered",
+            "You find a battery that might still work."
+        );
+
+    } else if (roll < .80) {
+
+        state.materials += 2;
+
+        showNotice(
+            "⚙️ Useful parts",
+            "You recover useful metal and electronic parts.<br><br>🧱 Materials +2"
+        );
+
+    } else {
+
+        state.health -= 15;
+
+        showNotice(
+            "💥 Wreckage accident",
+            "A piece of metal cuts you.<br><br>❤️ Health -15"
+        );
+    }
+}
+
+
+/* =========================================================
+   RADIO
+   ========================================================= */
+
+function repairRadio() {
+
+    if (
+        state.radioRepaired ||
+        !state.hasRadio ||
+        !state.hasBattery ||
+        state.materials < 2
+    ) return;
+
+    state.materials -= 2;
+
+    state.radioRepaired = true;
+
+    applyTimeChange(
+        state.settings.majorSuccess,
+        "You successfully repair the emergency radio."
+    );
+
+    showNotice(
+        "📻 RADIO REPAIRED",
+        "You may now be able to contact rescuers."
+    );
+}
+
+
+/* =========================================================
+   NIGHT
+   ========================================================= */
+
+function night() {
+
+    let report = "<strong>🌙 Nightfall</strong><br><br>";
+
+    if (state.water > 0) {
+
+        state.water--;
+
+        report += "💧 Water consumed.<br>";
+
+    } else {
+
+        state.health -= 15;
+
+        report += "💧 No water! ❤️ Health -15<br>";
+    }
+
+
+    if (state.food > 0) {
+
+        state.food--;
+
+        report += "🍖 Food consumed.<br>";
+
+    } else {
+
+        state.health -= 10;
+
+        report += "🍖 No food! ❤️ Health -10<br>";
+    }
+
+
+    if (state.day >= 4 && Math.random() < .25) {
+
+        if (state.hasShelter) {
+
+            report += "⛈️ A storm hits, but your shelter protects you.<br>";
+
+        } else {
+
+            state.health -= 20;
+
+            report += "⛈️ A storm hits! ❤️ Health -20<br>";
+
+            applyTimeChange(
+                state.settings.setbackSmall,
+                "The storm destroys some of your progress."
+            );
+        }
+    }
+
+
+    if (state.health <= 0) {
+
+        finishGame("death");
+        return;
+    }
+
+
+    if (state.day >= 7) {
+
+        finalDay();
+
+        return;
+    }
+
+
+    state.day++;
+
+    state.actionsRemaining = 3;
+
+    showNotice(
+        `🌅 Day ${state.day}`,
+        report + "<br>Your new day begins."
+    );
+
+    saveGame();
+}
+
+
+/* =========================================================
+   FINAL DAY
+   ========================================================= */
+
+function finalDay() {
+
+    let html = `
+        <div class="card">
+            <div class="event-title">
+                🚨 FINAL DAY
+            </div>
+
+            <p>
+                You have survived seven days.
+                Now you must escape the island.
+            </p>
+    `;
+
+    if (state.radioRepaired) {
+
+        html += `
+            <button class="choice"
+                onclick="attemptRadioRescue()">
+                📻 Transmit distress signal
+            </button>
+        `;
+
+    } else if (state.hasFire) {
+
+        html += `
+            <button class="choice"
+                onclick="attemptSignalFire()">
+                🔥 Light a massive signal fire
+            </button>
+        `;
+
+    } else {
+
+        html += `
+            <button class="choice"
+                onclick="finishGame('barely')">
+                🏝️ Accept your fate
+            </button>
+        `;
+    }
+
+    html += "</div>";
+
+    document.getElementById("gameArea").innerHTML = html;
+}
+
+
+/* =========================================================
+   RESCUE
+   ========================================================= */
+
+function attemptRadioRescue() {
+
+    if (state.health >= 75) {
+
+        finishGame("perfect");
+
+    } else {
+
+        finishGame("normal");
+    }
+}
+
+
+function attemptSignalFire() {
+
+    if (Math.random() < .50) {
+
+        state.flags.successfulSignalFire = true;
+
+        finishGame("signal");
+
+    } else {
+
+        applyTimeChange(
+            state.settings.majorFailure,
+            "The rescue helicopter does not see your signal."
+        );
+
+        finishGame("barely");
+    }
+}
+
+
+/* =========================================================
+   FINAL RESULT
+   ========================================================= */
+
+function finishGame(type) {
+
+    state.gameStatus = "finished";
+
+    state.result = type;
+
+    let change = 0;
+
+    switch (type) {
+
+        case "perfect":
+            change = state.settings.perfectRescue;
+            break;
+
+        case "normal":
+            change = state.settings.normalRescue;
+            break;
+
+        case "signal":
+            change = state.settings.signalFireRescue;
+            break;
+
+        case "barely":
+            change = state.settings.barelySurvived;
+            break;
+
+        case "death":
+            change = state.settings.death;
+            break;
+
+        case "failure":
+            change = state.settings.failurePenalty;
+            break;
+    }
+
+    state.totalTimeChange += change;
+
+    saveGame();
+
+    render();
+}
+
+
+/* =========================================================
+   RESULT SCREEN
+   ========================================================= */
+
+function renderResult(area) {
+
+    let title = "";
+    let text = "";
+    let cls = "result";
+
+    switch (state.result) {
+
+        case "perfect":
+
+            title = "🏆 PERFECT RESCUE";
+
+            text =
+                "You repaired the radio and survived in excellent condition.";
+
+            break;
+
+        case "normal":
+
+            title = "🚁 RESCUED";
+
+            text =
+                "Your distress signal was received. Rescue has arrived.";
+
+            break;
+
+        case "signal":
+
+            title = "🔥 SIGNAL FIRE RESCUE";
+
+            text =
+                "Your signal fire was spotted by a passing helicopter.";
+
+            break;
+
+        case "barely":
+
+            title = "🏝️ YOU SURVIVED";
+
+            text =
+                "You survived the island, but you never managed a proper rescue.";
+
+            break;
+
+        case "death":
+
+            title = "☠️ YOU DIED";
+
+            text =
+                "The island proved too much.";
+
+            cls += " warning";
+
+            break;
+
+        case "failure":
+
+            title = "☠️ OBJECTIVE FAILED";
+
+            text =
+                "You reached the end without solving the island's final problem.";
+
+            cls += " warning";
+
+            break;
+    }
+
+
+    area.innerHTML = `
+
+        <div class="card ${cls}">
+
+            <div class="event-title">
+                ${title}
+            </div>
+
+            <p>
+                ${text}
+            </p>
+
+            <div class="result-time">
+
+                ${state.totalTimeChange > 0 ? "+" : ""}
+                ${state.totalTimeChange} minutes
+
+            </div>
+
+            <p>
+                Total Chastify time adjustment
+            </p>
+
+            <p>
+                ❤️ Final health: ${state.health}<br>
+                🍖 Food remaining: ${state.food}<br>
+                💧 Water remaining: ${state.water}<br>
+                🪵 Wood: ${state.wood}<br>
+                🧱 Materials: ${state.materials}
+            </p>
+
+            <button
+                class="primary"
+                onclick="newGame()">
+
+                🏝️ Play Again
+
+            </button>
+
+        </div>
+    `;
+}
+
+
+/* =========================================================
+   SETTINGS
+   ========================================================= */
+
+function openSettings() {
+
+    const form = document.getElementById("settingsForm");
+
+    const labels = {
+
+        perfectRescue: "🏆 Perfect rescue",
+        normalRescue: "🚁 Normal rescue",
+        signalFireRescue: "🔥 Signal fire rescue",
+        barelySurvived: "🏝️ Barely survived",
+
+        death: "☠️ Death",
+
+        failurePenalty: "💀 Extreme failure penalty",
+
+        luckySmall: "🎁 Small lucky event",
+        luckyLarge: "🎁 Large lucky event",
+
+        setbackSmall: "⚠️ Small setback",
+        setbackLarge: "⚠️ Large setback",
+
+        majorSuccess: "🏆 Major success",
+        majorFailure: "💥 Major failure"
+    };
+
+
+    form.innerHTML = Object.keys(labels).map(key => {
+
+        return `
+            <div class="setting-row">
+
+                <label>
+                    ${labels[key]}
+                </label>
+
+                <input
+                    type="number"
+                    id="setting_${key}"
+                    value="${state.settings[key]}"
+                >
+
+            </div>
+        `;
+
+    }).join("");
+
+
+    document
+        .getElementById("settingsOverlay")
+        .classList.remove("hidden");
+}
+
+
+function closeSettings() {
+
+    document
+        .getElementById("settingsOverlay")
+        .classList.add("hidden");
+}
+
+
+function saveSettings() {
+
+    Object.keys(state.settings).forEach(key => {
+
+        const input =
+            document.getElementById("setting_" + key);
+
+        if (input) {
+
+            state.settings[key] =
+                Number(input.value);
+        }
+
+    });
+
+    saveGame();
+
+    closeSettings();
+
+    showNotice(
+        "⚙️ Settings saved",
+        "Your time settings have been updated."
+    );
+}
+
+
+/* =========================================================
+   NEW GAME
+   ========================================================= */
+
+function newGame() {
+
+    if (!confirm("Start a completely new game?")) return;
+
+    state = {
+
+        version: 1,
+
+        day: 1,
+
+        actionsRemaining: 3,
+
+        health: 100,
+
+        food: 3,
+        water: 3,
+
+        wood: 0,
+        materials: 0,
+
+        hasShelter: false,
+        hasFire: false,
+
+        hasContainer: false,
+        hasRadio: false,
+        hasBattery: false,
+        radioRepaired: false,
+
+        locations: {
+            beach: true,
+            jungle: false,
+            cave: false,
+            wreckage: false,
+            radioTower: false
+        },
+
+        flags: {
+            freshwater: false,
+            survivorClues: 0,
+            successfulSignalFire: false
+        },
+
+        eventsSeen: [],
+
+        totalTimeChange: 0,
+
+        gameStatus: "playing",
+
+        result: null,
+
+        settings: {
+            ...DEFAULT_TIME_SETTINGS
+        }
+    };
+
+    saveGame();
+
+    render();
+}
+
+
+/* =========================================================
+   START
+   ========================================================= */
+
+loadGame();
+
+render();
+
+</script>
+
 </body>
 </html>
