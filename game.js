@@ -1,9 +1,25 @@
 /* =========================================================
    LOST ISLAND
-   Chastify Extension Integration + Game Engine
+   Chastify + Cloudflare Worker Integration
    ========================================================= */
 
 "use strict";
+
+
+/* =========================================================
+   CONFIGURATION
+   ========================================================= */
+
+const WORKER_URL =
+    "https://lost-island-api.timvancleef.workers.dev";
+
+
+/*
+ * Chastify origin.
+ */
+
+const CHASTIFY_ORIGIN =
+    "https://chastify.net";
 
 
 /* =========================================================
@@ -27,6 +43,9 @@ const gameState = {
     appId: null,
     lockId: null,
 
+    sessionId: null,
+    mainToken: null,
+
     lastResult: null
 };
 
@@ -43,16 +62,16 @@ const settings = {
     neutralChance: 40,
     punishmentChance: 25,
 
-    rewardMin: 60,
-    rewardMax: 180,
+    rewardMin: 30,
+    rewardMax: 60,
 
-    punishmentMin: 120,
-    punishmentMax: 360
+    punishmentMin: 60,
+    punishmentMax: 300
 };
 
 
 /* =========================================================
-   DIFFICULTY SETTINGS
+   DIFFICULTY
    ========================================================= */
 
 const difficultySettings = {
@@ -68,7 +87,6 @@ const difficultySettings = {
         punishmentMax: 180
     },
 
-
     normal: {
 
         name: "Normal",
@@ -80,7 +98,6 @@ const difficultySettings = {
         punishmentMax: 360
     },
 
-
     hard: {
 
         name: "Hard",
@@ -91,7 +108,6 @@ const difficultySettings = {
         punishmentMin: 720,
         punishmentMax: 1440
     },
-
 
     brutal: {
 
@@ -118,6 +134,7 @@ function randomNumber(min, max) {
     if (max < min) {
 
         [min, max] = [max, min];
+
     }
 
     return Math.floor(
@@ -140,16 +157,14 @@ function formatMinutes(minutes) {
 
     minutes = Math.round(minutes);
 
-
     if (minutes < 60) {
 
         return `${minutes} minute${minutes === 1 ? "" : "s"}`;
-    }
 
+    }
 
     const hours =
         Math.floor(minutes / 60);
-
 
     const remainingMinutes =
         minutes % 60;
@@ -160,16 +175,16 @@ function formatMinutes(minutes) {
         if (remainingMinutes === 0) {
 
             return `${hours} hour${hours === 1 ? "" : "s"}`;
+
         }
 
-
         return `${hours}h ${remainingMinutes}m`;
+
     }
 
 
     const days =
         Math.floor(hours / 24);
-
 
     const remainingHours =
         hours % 24;
@@ -178,6 +193,7 @@ function formatMinutes(minutes) {
     if (remainingHours === 0) {
 
         return `${days} day${days === 1 ? "" : "s"}`;
+
     }
 
 
@@ -200,57 +216,44 @@ function showDebug(message) {
         debug =
             document.createElement("div");
 
-
-        debug.id =
-            "debug";
-
+        debug.id = "debug";
 
         debug.style.marginTop =
             "20px";
 
-
         debug.style.padding =
             "12px";
-
 
         debug.style.background =
             "#111";
 
-
         debug.style.border =
             "1px solid #444";
-
 
         debug.style.borderRadius =
             "8px";
 
-
         debug.style.fontSize =
             "12px";
-
 
         debug.style.lineHeight =
             "1.5";
 
-
         debug.style.whiteSpace =
             "pre-wrap";
-
 
         debug.style.color =
             "#aaa";
 
-
         const main =
             document.querySelector("main");
 
-
         if (main) {
 
-            main.appendChild(
-                debug
-            );
+            main.appendChild(debug);
+
         }
+
     }
 
 
@@ -260,12 +263,52 @@ function showDebug(message) {
 
 
 /* =========================================================
+   SAFE DEBUG JSON
+   ========================================================= */
+
+function safeDebugObject(object) {
+
+    try {
+
+        return JSON.stringify(
+            object,
+            function(key, value) {
+
+                /*
+                 * Never display tokens in the debug panel.
+                 */
+
+                if (
+                    key === "mainToken" ||
+                    key === "token" ||
+                    key === "accessToken" ||
+                    key === "developerKey" ||
+                    key === "apiKey" ||
+                    key === "authorization"
+                ) {
+
+                    return "[REDACTED]";
+                }
+
+                return value;
+
+            },
+            2
+        );
+
+    } catch (error) {
+
+        return String(object);
+
+    }
+}
+
+
+/* =========================================================
    CONNECTION STATUS
    ========================================================= */
 
-function setConnectionStatus(
-    connected
-) {
+function setConnectionStatus(connected) {
 
     gameState.chastifyConnected =
         connected;
@@ -286,6 +329,7 @@ function setConnectionStatus(
     if (!dot || !text) {
 
         return;
+
     }
 
 
@@ -295,11 +339,9 @@ function setConnectionStatus(
             "offline"
         );
 
-
         dot.classList.add(
             "online"
         );
-
 
         text.textContent =
             "Chastify: Connected";
@@ -310,14 +352,13 @@ function setConnectionStatus(
             "online"
         );
 
-
         dot.classList.add(
             "offline"
         );
 
-
         text.textContent =
             "Chastify: Offline";
+
     }
 }
 
@@ -326,9 +367,7 @@ function setConnectionStatus(
    SEND MESSAGE TO CHASTIFY
    ========================================================= */
 
-function sendToChastify(
-    message
-) {
+function sendToChastify(message) {
 
     try {
 
@@ -341,24 +380,19 @@ function sendToChastify(
                 "Not running inside an iframe."
             );
 
-
             return false;
         }
 
 
-        showDebug(
-            "SENT TO CHASTIFY:\n" +
-            JSON.stringify(
-                message,
-                null,
-                2
-            )
+        window.parent.postMessage(
+            message,
+            CHASTIFY_ORIGIN
         );
 
 
-        window.parent.postMessage(
-            message,
-            "*"
+        showDebug(
+            "SENT TO CHASTIFY:\n" +
+            safeDebugObject(message)
         );
 
 
@@ -371,14 +405,14 @@ function sendToChastify(
             error.message
         );
 
-
         return false;
+
     }
 }
 
 
 /* =========================================================
-   CONNECT TO CHASTIFY
+   CHASTIFY CONNECTION
    ========================================================= */
 
 function connectToChastify() {
@@ -388,16 +422,70 @@ function connectToChastify() {
     );
 
 
-    /*
-     * This is the handshake that has
-     * already been confirmed to work.
-     */
+    const requestId =
+        crypto.randomUUID ?
+        crypto.randomUUID() :
+        Date.now().toString();
+
 
     sendToChastify({
 
         type:
-            "chastify:ext:setup:init"
+            "chastify:ext:req",
+
+        v:
+            1,
+
+        id:
+            requestId,
+
+        action:
+            "setup.init",
+
+        payload:
+            {}
+
     });
+
+}
+
+
+/* =========================================================
+   REQUEST CURRENT CONFIGURATION
+   ========================================================= */
+
+function requestConfig() {
+
+    showDebug(
+        "Requesting current Chastify configuration..."
+    );
+
+
+    const requestId =
+        crypto.randomUUID ?
+        crypto.randomUUID() :
+        Date.now().toString();
+
+
+    sendToChastify({
+
+        type:
+            "chastify:ext:req",
+
+        v:
+            1,
+
+        id:
+            requestId,
+
+        action:
+            "setup.get_config",
+
+        payload:
+            {}
+
+    });
+
 }
 
 
@@ -409,33 +497,41 @@ window.addEventListener(
     "message",
     function(event) {
 
-        showDebug(
-            "MESSAGE RECEIVED:\n" +
-            "Origin: " +
-            event.origin +
-            "\nData:\n" +
-            JSON.stringify(
-                event.data,
-                null,
-                2
-            )
-        );
+
+        /*
+         * During development we accept the Chastify
+         * response so we can inspect the protocol.
+         */
+
+        if (
+            event.origin !==
+            CHASTIFY_ORIGIN
+        ) {
+
+            return;
+
+        }
 
 
         const data =
             event.data;
 
 
+        showDebug(
+            "MESSAGE RECEIVED:\n" +
+            "Origin: " +
+            event.origin +
+            "\nData:\n" +
+            safeDebugObject(data)
+        );
+
+
         if (!data) {
 
             return;
+
         }
 
-
-        /*
-         * Some environments may send
-         * JSON as a string.
-         */
 
         if (
             typeof data ===
@@ -444,32 +540,27 @@ window.addEventListener(
 
             try {
 
-                const parsed =
-                    JSON.parse(
-                        data
-                    );
-
-
                 handleChastifyMessage(
-                    parsed
+                    JSON.parse(data)
                 );
 
             } catch (error) {
 
                 showDebug(
-                    "Received string message " +
-                    "but it was not valid JSON."
+                    "Received string but it was not JSON."
                 );
+
             }
 
-
             return;
+
         }
 
 
         handleChastifyMessage(
             data
         );
+
     }
 );
 
@@ -478,9 +569,7 @@ window.addEventListener(
    HANDLE CHASTIFY MESSAGE
    ========================================================= */
 
-function handleChastifyMessage(
-    data
-) {
+function handleChastifyMessage(data) {
 
     if (
         !data ||
@@ -488,22 +577,25 @@ function handleChastifyMessage(
     ) {
 
         return;
+
     }
 
 
-    const messageType =
-        data.type ||
-        data.event ||
-        data.action ||
-        data.messageType;
+    /*
+     * Chastify response format:
+     *
+     * {
+     *   type: "chastify:ext:resp",
+     *   v: 1,
+     *   id: "...",
+     *   ok: true,
+     *   data: {...}
+     * }
+     */
 
-
-    /* =====================================================
-       CHASTIFY RESPONSE
-       ===================================================== */
 
     if (
-        messageType ===
+        data.type ===
         "chastify:ext:resp"
     ) {
 
@@ -512,114 +604,58 @@ function handleChastifyMessage(
         );
 
 
-        /*
-         * A successful setup response
-         * contains the Chastify information
-         * we need.
-         */
-
         if (
             data.ok &&
             data.data
         ) {
 
-            const responseData =
-                data.data;
+            extractChastifyInformation(
+                data.data
+            );
 
 
-            if (
-                responseData.appId
-            ) {
-
-                gameState.appId =
-                    responseData.appId;
-            }
-
-
-            if (
-                responseData.lockId
-            ) {
-
-                gameState.lockId =
-                    responseData.lockId;
-            }
+            setConnectionStatus(
+                true
+            );
 
 
             /*
-             * hello=true confirms the
-             * connection handshake.
+             * Show all available response data.
              */
-
-            if (
-                responseData.hello === true
-            ) {
-
-                setConnectionStatus(
-                    true
-                );
-
-
-                showDebug(
-                    "Chastify connection established."
-                );
-
-
-                showDebug(
-                    "App ID: " +
-                    gameState.appId
-                );
-
-
-                showDebug(
-                    "Lock ID: " +
-                    gameState.lockId
-                );
-            }
-
-
-            /*
-             * If Chastify ever returns
-             * configuration through this
-             * response, apply it.
-             */
-
-            if (
-                responseData.config
-            ) {
-
-                applyRemoteConfig(
-                    responseData.config
-                );
-            }
-        }
-
-
-        /*
-         * Explicit error response.
-         */
-
-        if (
-            data.ok === false
-        ) {
 
             showDebug(
-                "Chastify returned an error:\n" +
-                JSON.stringify(
-                    data,
-                    null,
-                    2
+                "Chastify data:\n" +
+                safeDebugObject(
+                    data.data
                 )
             );
+
         }
 
 
         return;
+
     }
 
 
-    /* =====================================================
-       SESSION CREATED
-       ===================================================== */
+    /*
+     * Some versions may send setup events
+     * directly.
+     */
+
+    const messageType =
+        data.type ||
+        data.event ||
+        data.action ||
+        data.messageType;
+
+
+    if (!messageType) {
+
+        return;
+
+    }
+
 
     if (
         messageType ===
@@ -630,19 +666,14 @@ function handleChastifyMessage(
             true
         );
 
-
-        showDebug(
-            "Chastify session created."
+        extractChastifyInformation(
+            data
         );
 
-
         return;
+
     }
 
-
-    /* =====================================================
-       SESSION UPDATED
-       ===================================================== */
 
     if (
         messageType ===
@@ -653,265 +684,198 @@ function handleChastifyMessage(
             true
         );
 
-
-        showDebug(
-            "Chastify session updated."
+        extractChastifyInformation(
+            data
         );
 
-
         return;
+
     }
 
 
-    /* =====================================================
-       GENERIC READY EVENTS
-       ===================================================== */
-
     if (
         messageType ===
-            "ready" ||
-
+        "chastify:ready" ||
         messageType ===
-            "connected" ||
-
+        "ready" ||
         messageType ===
-            "chastify:ready"
+        "connected"
     ) {
 
         setConnectionStatus(
             true
         );
 
-
-        showDebug(
-            "Chastify reports connection ready."
-        );
-
-
         return;
+
     }
 
-
-    /* =====================================================
-       UNKNOWN MESSAGE
-       ===================================================== */
-
-    showDebug(
-        "Unknown Chastify message type: " +
-        messageType
-    );
 }
 
 
 /* =========================================================
-   APPLY REMOTE CONFIGURATION
+   EXTRACT CHASTIFY INFORMATION
    ========================================================= */
 
-function applyRemoteConfig(
-    config
-) {
+function extractChastifyInformation(data) {
 
     if (
-        !config ||
-        typeof config !== "object"
+        !data ||
+        typeof data !== "object"
     ) {
 
         return;
-    }
 
-
-    if (
-        config.difficulty &&
-        difficultySettings[
-            config.difficulty
-        ]
-    ) {
-
-        settings.difficulty =
-            config.difficulty;
-
-
-        applyDifficulty(
-            config.difficulty
-        );
-    }
-
-
-    if (
-        config.rewardChance !==
-        undefined
-    ) {
-
-        settings.rewardChance =
-            Number(
-                config.rewardChance
-            );
-    }
-
-
-    if (
-        config.neutralChance !==
-        undefined
-    ) {
-
-        settings.neutralChance =
-            Number(
-                config.neutralChance
-            );
-    }
-
-
-    if (
-        config.punishmentChance !==
-        undefined
-    ) {
-
-        settings.punishmentChance =
-            Number(
-                config.punishmentChance
-            );
     }
 
 
     /*
-     * Explicit time settings from
-     * Chastify override difficulty
-     * defaults if supplied.
+     * App ID
      */
 
-    if (
-        config.rewardMin !==
-        undefined
-    ) {
+    if (data.appId) {
 
-        settings.rewardMin =
-            Number(
-                config.rewardMin
-            );
+        gameState.appId =
+            data.appId;
+
     }
 
 
-    if (
-        config.rewardMax !==
-        undefined
-    ) {
+    /*
+     * Lock ID
+     */
 
-        settings.rewardMax =
-            Number(
-                config.rewardMax
-            );
+    if (data.lockId) {
+
+        gameState.lockId =
+            data.lockId;
+
     }
 
 
-    if (
-        config.punishmentMin !==
-        undefined
+    /*
+     * Session ID candidates
+     */
+
+    const possibleSessionIds = [
+
+        data.sessionId,
+
+        data.session_id,
+
+        data.session?.id,
+
+        data.session?.sessionId,
+
+        data.data?.sessionId,
+
+        data.data?.id
+
+    ];
+
+
+    for (
+        const value
+        of possibleSessionIds
     ) {
 
-        settings.punishmentMin =
-            Number(
-                config.punishmentMin
-            );
+        if (
+            typeof value ===
+            "string" &&
+            value.length > 0
+        ) {
+
+            gameState.sessionId =
+                value;
+
+            break;
+
+        }
+
     }
 
 
-    if (
-        config.punishmentMax !==
-        undefined
+    /*
+     * Main token candidates.
+     *
+     * We store it internally but NEVER display it.
+     */
+
+    const possibleTokens = [
+
+        data.mainToken,
+
+        data.main_token,
+
+        data.session?.mainToken,
+
+        data.session?.main_token,
+
+        data.token,
+
+        data.accessToken,
+
+        data.data?.mainToken,
+
+        data.data?.main_token,
+
+        data.data?.token
+
+    ];
+
+
+    for (
+        const value
+        of possibleTokens
     ) {
 
-        settings.punishmentMax =
-            Number(
-                config.punishmentMax
-            );
+        if (
+            typeof value ===
+            "string" &&
+            value.length > 0
+        ) {
+
+            gameState.mainToken =
+                value;
+
+            break;
+
+        }
+
     }
 
 
-    updateSettingsUI();
-
-
-    gameState.configReceived =
-        true;
-
+    /*
+     * Debug status without exposing token.
+     */
 
     showDebug(
-        "Remote configuration applied."
+        "Chastify connection data:\n" +
+        "appId: " +
+        (gameState.appId || "NOT FOUND") +
+        "\n" +
+        "lockId: " +
+        (gameState.lockId || "NOT FOUND") +
+        "\n" +
+        "sessionId: " +
+        (gameState.sessionId || "NOT FOUND") +
+        "\n" +
+        "mainToken: " +
+        (
+            gameState.mainToken
+                ? "[AVAILABLE]"
+                : "NOT FOUND"
+        )
     );
+
 }
 
 
 /* =========================================================
-   APPLY DIFFICULTY
+   WORKER REQUEST
    ========================================================= */
 
-function applyDifficulty(
-    difficulty
-) {
-
-    const selected =
-        difficultySettings[
-            difficulty
-        ];
-
-
-    if (!selected) {
-
-        return;
-    }
-
-
-    settings.rewardMin =
-        selected.rewardMin;
-
-
-    settings.rewardMax =
-        selected.rewardMax;
-
-
-    settings.punishmentMin =
-        selected.punishmentMin;
-
-
-    settings.punishmentMax =
-        selected.punishmentMax;
-
-
-    showDebug(
-        "Difficulty applied: " +
-        selected.name
-    );
-
-
-    showDebug(
-        "Reward time: " +
-        formatMinutes(
-            settings.rewardMin
-        ) +
-        " - " +
-        formatMinutes(
-            settings.rewardMax
-        )
-    );
-
-
-    showDebug(
-        "Punishment time: " +
-        formatMinutes(
-            settings.punishmentMin
-        ) +
-        " - " +
-        formatMinutes(
-            settings.punishmentMax
-        )
-    );
-}
-
-
-/* =========================================================
-   CHANGE CHASTIFY TIME
-   ========================================================= */
-
-function changeChastifyTime(
+async function sendTimeChangeToWorker(
     minutes,
     reason
 ) {
@@ -922,117 +886,221 @@ function changeChastifyTime(
 
     if (!minutes) {
 
-        return;
+        return false;
+
+    }
+
+
+    /*
+     * We need session information.
+     */
+
+    if (
+        !gameState.sessionId
+    ) {
+
+        showDebug(
+            "ERROR: No Chastify sessionId available."
+        );
+
+        return false;
+
+    }
+
+
+    if (
+        !gameState.mainToken
+    ) {
+
+        showDebug(
+            "ERROR: No Chastify mainToken available."
+        );
+
+        return false;
+
+    }
+
+
+    const seconds =
+        minutes * 60;
+
+
+    showDebug(
+        "SENDING TIME CHANGE TO WORKER:\n" +
+        "minutes: " +
+        minutes +
+        "\n" +
+        "seconds: " +
+        seconds +
+        "\n" +
+        "reason: " +
+        (reason || "Lost Island")
+    );
+
+
+    try {
+
+        const response =
+            await fetch(
+                WORKER_URL,
+                {
+
+                    method:
+                        "POST",
+
+                    headers: {
+
+                        "Content-Type":
+                            "application/json"
+
+                    },
+
+                    body:
+                        JSON.stringify({
+
+                            sessionId:
+                                gameState.sessionId,
+
+                            mainToken:
+                                gameState.mainToken,
+
+                            seconds:
+                                seconds,
+
+                            reason:
+                                reason ||
+                                "Lost Island"
+
+                        })
+
+                }
+            );
+
+
+        const responseText =
+            await response.text();
+
+
+        let responseData;
+
+
+        try {
+
+            responseData =
+                JSON.parse(
+                    responseText
+                );
+
+        } catch {
+
+            responseData =
+                responseText;
+
+        }
+
+
+        showDebug(
+            "WORKER RESPONSE:\n" +
+            "HTTP " +
+            response.status +
+            "\n" +
+            safeDebugObject(
+                responseData
+            )
+        );
+
+
+        if (
+            !response.ok
+        ) {
+
+            showDebug(
+                "TIME CHANGE FAILED."
+            );
+
+            return false;
+
+        }
+
+
+        if (
+            responseData &&
+            responseData.ok
+        ) {
+
+            gameState.totalTimeChange +=
+                minutes;
+
+            showDebug(
+                "TIME CHANGE SUCCESSFUL."
+            );
+
+            return true;
+
+        }
+
+
+        return false;
+
+    } catch (error) {
+
+        showDebug(
+            "WORKER REQUEST ERROR:\n" +
+            error.message
+        );
+
+        return false;
+
+    }
+
+}
+
+
+/* =========================================================
+   CHANGE CHASTIFY TIME
+   ========================================================= */
+
+async function changeChastifyTime(
+    minutes,
+    reason
+) {
+
+    minutes =
+        Math.round(minutes);
+
+
+    if (!minutes) {
+
+        return false;
+
     }
 
 
     const action =
         minutes > 0
-            ? "add"
-            : "remove";
+            ? "ADD"
+            : "REMOVE";
 
 
     const amount =
         Math.abs(minutes);
 
 
-    gameState.totalTimeChange +=
-        minutes;
-
-
     showDebug(
-        "================================"
+        `TIME ACTION: ${action} ${amount} minutes`
     );
 
 
-    showDebug(
-        "CHASTIFY TIME CHANGE"
+    return await sendTimeChangeToWorker(
+        minutes,
+        reason
     );
 
-
-    showDebug(
-        "Action: " +
-        action
-    );
-
-
-    showDebug(
-        "Amount: " +
-        amount +
-        " minutes"
-    );
-
-
-    showDebug(
-        "Reason: " +
-        (
-            reason ||
-            "Lost Island event"
-        )
-    );
-
-
-    showDebug(
-        "App ID: " +
-        (
-            gameState.appId ||
-            "unknown"
-        )
-    );
-
-
-    showDebug(
-        "Lock ID: " +
-        (
-            gameState.lockId ||
-            "unknown"
-        )
-    );
-
-
-    /*
-     * Send the time-change command.
-     *
-     * Positive minutes:
-     *     add lock time
-     *
-     * Negative minutes:
-     *     remove lock time
-     *
-     * We send the absolute amount together
-     * with the action.
-     */
-
-    sendToChastify({
-
-        type:
-            "chastify:ext:time",
-
-        action:
-            action,
-
-        minutes:
-            amount,
-
-        reason:
-            reason ||
-            "Lost Island event"
-    });
-
-
-    showDebug(
-        "Chastify time-change message sent."
-    );
-
-
-    showDebug(
-        "================================"
-    );
 }
 
 
 /* =========================================================
-   DETERMINE RANDOM OUTCOME
+   RANDOM OUTCOME
    ========================================================= */
 
 function determineOutcome() {
@@ -1078,6 +1146,7 @@ function determineOutcome() {
     ) {
 
         return "neutral";
+
     }
 
 
@@ -1092,6 +1161,7 @@ function determineOutcome() {
     ) {
 
         return "reward";
+
     }
 
 
@@ -1102,10 +1172,12 @@ function determineOutcome() {
     ) {
 
         return "neutral";
+
     }
 
 
     return "punishment";
+
 }
 
 
@@ -1115,14 +1187,10 @@ function determineOutcome() {
 
 const events = {
 
-
-    /* =====================================================
-       WATER
-       ===================================================== */
-
     water: [
 
         {
+
             text:
                 "You follow a narrow trail between the trees. " +
                 "After some searching you discover a small freshwater pool.",
@@ -1131,20 +1199,28 @@ const events = {
                 "reward",
 
             water:
-                2
+                2,
+
+            time:
+                -30
+
         },
 
-
         {
+
             text:
                 "You search for a long time but find nothing useful.",
 
             outcome:
-                "neutral"
+                "neutral",
+
+            time:
+                0
+
         },
 
-
         {
+
             text:
                 "You push deeper into the jungle looking for water. " +
                 "A hidden sinkhole gives way beneath you.",
@@ -1154,17 +1230,16 @@ const events = {
 
             health:
                 -10
+
         }
+
     ],
 
-
-    /* =====================================================
-       EXPLORE
-       ===================================================== */
 
     explore: [
 
         {
+
             text:
                 "You explore the coastline and discover a sheltered " +
                 "area that could make a useful secondary camp.",
@@ -1174,20 +1249,22 @@ const events = {
 
             materials:
                 1
+
         },
 
-
         {
+
             text:
                 "The island gives you nothing but dense vegetation " +
                 "and another exhausting walk.",
 
             outcome:
                 "neutral"
+
         },
 
-
         {
+
             text:
                 "You wander too far from camp and lose your bearings. " +
                 "Finding your way back takes hours.",
@@ -1197,17 +1274,16 @@ const events = {
 
             health:
                 -5
+
         }
+
     ],
 
-
-    /* =====================================================
-       MATERIALS
-       ===================================================== */
 
     materials: [
 
         {
+
             text:
                 "You find several pieces of dry wood and useful branches.",
 
@@ -1216,10 +1292,11 @@ const events = {
 
             materials:
                 2
+
         },
 
-
         {
+
             text:
                 "Most of what you collect is damp or rotten.",
 
@@ -1228,10 +1305,11 @@ const events = {
 
             materials:
                 1
+
         },
 
-
         {
+
             text:
                 "A branch snaps unexpectedly and injures your hand.",
 
@@ -1240,17 +1318,16 @@ const events = {
 
             health:
                 -8
+
         }
+
     ],
 
-
-    /* =====================================================
-       WRECK
-       ===================================================== */
 
     wreck: [
 
         {
+
             text:
                 "You carefully search the wreckage and recover useful supplies.",
 
@@ -1262,19 +1339,21 @@ const events = {
 
             food:
                 1
+
         },
 
-
         {
+
             text:
                 "The wreck is unstable. You find nothing worth taking.",
 
             outcome:
                 "neutral"
+
         },
 
-
         {
+
             text:
                 "Part of the wreck collapses while you are searching it. " +
                 "You barely escape.",
@@ -1284,17 +1363,16 @@ const events = {
 
             health:
                 -15
+
         }
+
     ],
 
-
-    /* =====================================================
-       CAMP
-       ===================================================== */
 
     camp: [
 
         {
+
             text:
                 "You improve the shelter and create a more secure sleeping area.",
 
@@ -1306,20 +1384,22 @@ const events = {
 
             materials:
                 -1
+
         },
 
-
         {
+
             text:
                 "You spend the time repairing the camp. " +
                 "It is slightly better than before.",
 
             outcome:
                 "neutral"
+
         },
 
-
         {
+
             text:
                 "Your construction fails and part of the shelter collapses.",
 
@@ -1331,8 +1411,11 @@ const events = {
 
             health:
                 -5
+
         }
+
     ]
+
 };
 
 
@@ -1340,15 +1423,14 @@ const events = {
    PERFORM ACTION
    ========================================================= */
 
-function performAction(
-    action
-) {
+function performAction(action) {
 
     if (
         !events[action]
     ) {
 
         return;
+
     }
 
 
@@ -1359,10 +1441,6 @@ function performAction(
         events[action];
 
 
-    /*
-     * Pick an initial random event.
-     */
-
     const baseEvent =
         actionEvents[
             randomNumber(
@@ -1371,11 +1449,6 @@ function performAction(
             )
         ];
 
-
-    /*
-     * Determine the actual RNG
-     * outcome.
-     */
 
     const rngOutcome =
         determineOutcome();
@@ -1386,9 +1459,7 @@ function performAction(
 
 
     /*
-     * If the randomly selected event
-     * doesn't match the RNG outcome,
-     * replace it with an event that does.
+     * RNG can override the base event.
      */
 
     if (
@@ -1415,7 +1486,9 @@ function performAction(
                         matching.length - 1
                     )
                 ];
+
         }
+
     }
 
 
@@ -1424,8 +1497,6 @@ function performAction(
         selectedEvent
     );
 
-
-    updateDisplay();
 }
 
 
@@ -1433,7 +1504,7 @@ function performAction(
    APPLY EVENT
    ========================================================= */
 
-function applyEvent(
+async function applyEvent(
     action,
     event
 ) {
@@ -1443,9 +1514,9 @@ function applyEvent(
         "neutral";
 
 
-    /* =====================================================
-       RESOURCE CHANGES
-       ===================================================== */
+    /*
+     * RESOURCE CHANGES
+     */
 
     if (
         event.health
@@ -1455,10 +1526,10 @@ function applyEvent(
             clamp(
                 gameState.health +
                 event.health,
-
                 0,
                 100
             );
+
     }
 
 
@@ -1472,6 +1543,7 @@ function applyEvent(
                 gameState.water +
                 event.water
             );
+
     }
 
 
@@ -1485,6 +1557,7 @@ function applyEvent(
                 gameState.food +
                 event.food
             );
+
     }
 
 
@@ -1498,22 +1571,19 @@ function applyEvent(
                 gameState.materials +
                 event.materials
             );
+
     }
 
 
-    /* =====================================================
-       TIME CONSEQUENCES
-       ===================================================== */
-
-    let timeChange = 0;
-
-
     /*
-     * REWARD
-     *
-     * A reward reduces the Chastify
-     * lock time.
+     * =====================================================
+     * TIME CONSEQUENCES
+     * =====================================================
      */
+
+    let timeChange =
+        0;
+
 
     if (
         outcome ===
@@ -1525,15 +1595,9 @@ function applyEvent(
                 settings.rewardMin,
                 settings.rewardMax
             );
+
     }
 
-
-    /*
-     * PUNISHMENT
-     *
-     * A punishment increases the
-     * Chastify lock time.
-     */
 
     else if (
         outcome ===
@@ -1545,23 +1609,19 @@ function applyEvent(
                 settings.punishmentMin,
                 settings.punishmentMax
             );
+
     }
 
 
     /*
-     * EVENT-SPECIFIC TIME
+     * Event-specific time.
      *
-     * If an event explicitly defines
-     * time, the sign determines whether
-     * it is a reward or punishment.
-     *
-     * The actual amount is still generated
-     * from the current difficulty settings.
+     * Negative = reward
+     * Positive = punishment
      */
 
     if (
-        event.time !==
-        undefined
+        event.time !== undefined
     ) {
 
         if (
@@ -1592,29 +1652,35 @@ function applyEvent(
 
             timeChange =
                 0;
+
         }
+
     }
 
 
     /*
-     * Send the actual time consequence
-     * to Chastify.
+     * =====================================================
+     * SEND REAL TIME CHANGE
+     * =====================================================
      */
 
     if (
         timeChange !== 0
     ) {
 
-        changeChastifyTime(
+        await changeChastifyTime(
             timeChange,
             `${action} - ${outcome}`
         );
+
     }
 
 
-    /* =====================================================
-       RESULT DISPLAY
-       ===================================================== */
+    /*
+     * =====================================================
+     * DISPLAY RESULT
+     * =====================================================
+     */
 
     let title =
         "";
@@ -1633,6 +1699,7 @@ function applyEvent(
 
         icon =
             "🍀";
+
     }
 
 
@@ -1646,6 +1713,7 @@ function applyEvent(
 
         icon =
             "⚠️";
+
     }
 
 
@@ -1656,6 +1724,7 @@ function applyEvent(
 
         icon =
             "➖";
+
     }
 
 
@@ -1668,16 +1737,11 @@ function applyEvent(
     ) {
 
         timeText =
-            `<p>
-                <strong>
-                    🔓 Time reduction:
-                </strong>
-                ${formatMinutes(
-                    Math.abs(
-                        timeChange
-                    )
-                )}
-            </p>`;
+            `<p><strong>🔓 Time reduction:</strong> ` +
+            `${formatMinutes(
+                Math.abs(timeChange)
+            )}</p>`;
+
     }
 
 
@@ -1686,14 +1750,11 @@ function applyEvent(
     ) {
 
         timeText =
-            `<p>
-                <strong>
-                    🔒 Lock time added:
-                </strong>
-                ${formatMinutes(
-                    timeChange
-                )}
-            </p>`;
+            `<p><strong>🔒 Lock time added:</strong> ` +
+            `${formatMinutes(
+                timeChange
+            )}</p>`;
+
     }
 
 
@@ -1729,14 +1790,12 @@ function applyEvent(
             ${timeText}
 
             <p>
-                <strong>
-                    Actions used:
-                </strong>
-
+                <strong>Actions used:</strong>
                 ${gameState.totalActions}
             </p>
 
         `;
+
     }
 
 
@@ -1750,19 +1809,24 @@ function applyEvent(
 
         timeChange:
             timeChange
+
     };
 
 
     /*
-     * One action advances the day.
+     * Next day.
      */
 
     gameState.day++;
+
+
+    updateDisplay();
+
 }
 
 
 /* =========================================================
-   UPDATE DISPLAY
+   DISPLAY
    ========================================================= */
 
 function updateDisplay() {
@@ -1803,6 +1867,7 @@ function updateDisplay() {
 
         health.textContent =
             gameState.health;
+
     }
 
 
@@ -1812,6 +1877,7 @@ function updateDisplay() {
 
         water.textContent =
             gameState.water;
+
     }
 
 
@@ -1821,6 +1887,7 @@ function updateDisplay() {
 
         food.textContent =
             gameState.food;
+
     }
 
 
@@ -1830,6 +1897,7 @@ function updateDisplay() {
 
         materials.textContent =
             gameState.materials;
+
     }
 
 
@@ -1839,7 +1907,9 @@ function updateDisplay() {
 
         day.textContent =
             gameState.day;
+
     }
+
 }
 
 
@@ -1903,6 +1973,7 @@ function updateSettingsUI() {
 
         difficulty.value =
             settings.difficulty;
+
     }
 
 
@@ -1912,6 +1983,7 @@ function updateSettingsUI() {
 
         rewardChance.value =
             settings.rewardChance;
+
     }
 
 
@@ -1921,6 +1993,7 @@ function updateSettingsUI() {
 
         neutralChance.value =
             settings.neutralChance;
+
     }
 
 
@@ -1930,6 +2003,7 @@ function updateSettingsUI() {
 
         punishmentChance.value =
             settings.punishmentChance;
+
     }
 
 
@@ -1939,6 +2013,7 @@ function updateSettingsUI() {
 
         rewardMin.value =
             settings.rewardMin;
+
     }
 
 
@@ -1948,6 +2023,7 @@ function updateSettingsUI() {
 
         rewardMax.value =
             settings.rewardMax;
+
     }
 
 
@@ -1957,6 +2033,7 @@ function updateSettingsUI() {
 
         punishmentMin.value =
             settings.punishmentMin;
+
     }
 
 
@@ -1966,7 +2043,9 @@ function updateSettingsUI() {
 
         punishmentMax.value =
             settings.punishmentMax;
+
     }
+
 }
 
 
@@ -2024,10 +2103,6 @@ function saveSettings() {
         );
 
 
-    /*
-     * Read values.
-     */
-
     settings.difficulty =
         difficulty.value;
 
@@ -2074,10 +2149,6 @@ function saveSettings() {
         );
 
 
-    /*
-     * Validate RNG percentages.
-     */
-
     const total =
         settings.rewardChance +
         settings.neutralChance +
@@ -2093,54 +2164,20 @@ function saveSettings() {
             `Current total: ${total}%`
         );
 
-
         return;
+
     }
 
 
     /*
-     * Validate time ranges.
-     */
-
-    if (
-        settings.rewardMin < 0 ||
-        settings.rewardMax < 0 ||
-        settings.punishmentMin < 0 ||
-        settings.punishmentMax < 0
-    ) {
-
-        alert(
-            "Time values cannot be negative."
-        );
-
-
-        return;
-    }
-
-
-    /*
-     * Apply selected difficulty.
+     * Apply difficulty defaults.
      *
-     * This means choosing a difficulty
-     * actually changes the ranges.
+     * We deliberately keep the manually entered
+     * values unless the user changes them.
      */
 
-    applyDifficulty(
-        settings.difficulty
-    );
+    sendSetupConfig();
 
-
-    /*
-     * Refresh UI with the actual
-     * difficulty values.
-     */
-
-    updateSettingsUI();
-
-
-    /*
-     * Close modal.
-     */
 
     const modal =
         document.getElementById(
@@ -2155,12 +2192,64 @@ function saveSettings() {
         modal.classList.add(
             "hidden"
         );
+
     }
 
+}
 
-    showDebug(
-        "Settings saved."
-    );
+
+/* =========================================================
+   SEND SETUP CONFIG
+   ========================================================= */
+
+function sendSetupConfig() {
+
+    sendToChastify({
+
+        type:
+            "chastify:ext:req",
+
+        v:
+            1,
+
+        id:
+            crypto.randomUUID ?
+            crypto.randomUUID() :
+            Date.now().toString(),
+
+        action:
+            "setup.config",
+
+        payload: {
+
+            difficulty:
+                settings.difficulty,
+
+            rewardChance:
+                settings.rewardChance,
+
+            neutralChance:
+                settings.neutralChance,
+
+            punishmentChance:
+                settings.punishmentChance,
+
+            rewardMin:
+                settings.rewardMin,
+
+            rewardMax:
+                settings.rewardMax,
+
+            punishmentMin:
+                settings.punishmentMin,
+
+            punishmentMax:
+                settings.punishmentMax
+
+        }
+
+    });
+
 }
 
 
@@ -2195,8 +2284,7 @@ function initializeSettings() {
 
 
     if (
-        settingsBtn &&
-        modal
+        settingsBtn
     ) {
 
         settingsBtn.addEventListener(
@@ -2205,12 +2293,13 @@ function initializeSettings() {
 
                 updateSettingsUI();
 
-
                 modal.classList.remove(
                     "hidden"
                 );
+
             }
         );
+
     }
 
 
@@ -2222,12 +2311,12 @@ function initializeSettings() {
             "click",
             saveSettings
         );
+
     }
 
 
     if (
-        closeBtn &&
-        modal
+        closeBtn
     ) {
 
         closeBtn.addEventListener(
@@ -2237,9 +2326,12 @@ function initializeSettings() {
                 modal.classList.add(
                     "hidden"
                 );
+
             }
         );
+
     }
+
 }
 
 
@@ -2265,14 +2357,16 @@ function initializeActions() {
                     const action =
                         this.dataset.action;
 
-
                     performAction(
                         action
                     );
+
                 }
             );
+
         }
     );
+
 }
 
 
@@ -2282,18 +2376,11 @@ function initializeActions() {
 
 function initializeGame() {
 
-    /*
-     * Initialize the normal game UI.
-     */
-
     updateDisplay();
-
 
     initializeSettings();
 
-
     initializeActions();
-
 
     setConnectionStatus(
         false
@@ -2311,9 +2398,20 @@ function initializeGame() {
     );
 
 
+    showDebug(
+        "Cloudflare Worker:\n" +
+        WORKER_URL
+    );
+
+
     /*
-     * Start Chastify connection.
+     * IMPORTANT:
+     *
+     * We deliberately do NOT print window.location,
+     * document.referrer, tokens or other potentially
+     * sensitive iframe information.
      */
+
 
     if (
         window.parent !== window
@@ -2321,18 +2419,27 @@ function initializeGame() {
 
         connectToChastify();
 
-    } else {
+
+        setTimeout(
+            requestConfig,
+            1000
+        );
+
+    }
+
+    else {
 
         showDebug(
-            "Opened directly. " +
-            "Chastify unavailable."
+            "Opened directly. Chastify unavailable."
         );
+
     }
+
 }
 
 
 /* =========================================================
-   START GAME
+   START
    ========================================================= */
 
 document.addEventListener(
