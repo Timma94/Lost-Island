@@ -187,6 +187,19 @@ function showDebug(message) {
     // Debug disabled.
 }
 
+/* =========================================================
+   LOST ISLAND
+   Chastify + Cloudflare Worker Integration
+   IFRAME HASH AUTHENTICATION VERSION
+   ========================================================= */
+
+"use strict";
+
+// Disable all console debug output from this game
+console.log = function () {};
+console.warn = function () {};
+console.info = function () {};
+console.debug = function () {};
 
 /* =========================================================
    SAFE DEBUG JSON
