@@ -962,3 +962,7 @@ function initializeGame() {
 
 
 initializeGame();
+
+console.log("LOST ISLAND DEBUG");
+console.log("Inside iframe:", window.parent !== window);
+console.log("Parent origin:", window.parent !== window ? document.referrer : "none");
