@@ -1497,3 +1497,4 @@ document.addEventListener(
     "DOMContentLoaded",
     initializeGame
 );
+
