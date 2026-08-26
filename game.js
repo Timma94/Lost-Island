@@ -1,7 +1,7 @@
 /* =========================================================
    LOST ISLAND
    Chastify + Cloudflare Worker Integration
-   PRODUCTION VERSION
+   CLEAN VERSION
    ========================================================= */
 
 "use strict";
@@ -34,12 +34,16 @@ const gameState = {
     totalTimeChange: 0,
 
     chastifyConnected: false,
+    configReceived: false,
 
     appId: null,
     lockId: null,
 
     sessionId: null,
     mainToken: null,
+
+    bridgeNonce: null,
+    parentOrigin: CHASTIFY_ORIGIN,
 
     lastResult: null
 };
@@ -115,7 +119,6 @@ function randomNumber(min, max) {
     max = Number(max);
 
     if (max < min) {
-
         [min, max] = [max, min];
     }
 
@@ -141,7 +144,6 @@ function formatMinutes(minutes) {
     if (minutes < 60) {
 
         return `${minutes} minute${minutes === 1 ? "" : "s"}`;
-
     }
 
     const hours =
@@ -172,6 +174,196 @@ function formatMinutes(minutes) {
     }
 
     return `${days}d ${remainingHours}h`;
+}
+
+
+/* =========================================================
+   SAFE DEBUG OBJECT
+   ========================================================= */
+
+function safeDebugObject(object) {
+
+    try {
+
+        return JSON.stringify(
+            object,
+            function(key, value) {
+
+                if (
+                    key === "mainToken" ||
+                    key === "token" ||
+                    key === "accessToken" ||
+                    key === "developerKey" ||
+                    key === "apiKey" ||
+                    key === "authorization"
+                ) {
+
+                    return "[REDACTED]";
+                }
+
+                return value;
+            },
+            2
+        );
+
+    } catch {
+
+        return String(object);
+    }
+}
+
+
+/* =========================================================
+   PARSE CHASTIFY LAUNCH HASH
+   ========================================================= */
+
+function parseChastifyLaunchContext() {
+
+    try {
+
+        const hash =
+            window.location.hash;
+
+        if (!hash) {
+            return false;
+        }
+
+        /*
+         * Chastify passes launch information in the iframe hash.
+         *
+         * Expected structure:
+         *
+         * #<encoded JSON>
+         *
+         * or
+         *
+         * #data=<encoded JSON>
+         */
+
+        let raw =
+            hash.substring(1);
+
+        if (raw.startsWith("data=")) {
+
+            raw =
+                raw.substring(5);
+        }
+
+        let decoded;
+
+        try {
+
+            decoded =
+                decodeURIComponent(raw);
+
+        } catch {
+
+            decoded =
+                raw;
+        }
+
+        let context;
+
+        try {
+
+            context =
+                JSON.parse(decoded);
+
+        } catch {
+
+            /*
+             * Some launch hashes may contain additional
+             * parameters. Try URLSearchParams as fallback.
+             */
+
+            const params =
+                new URLSearchParams(
+                    raw
+                );
+
+            const possibleData =
+                params.get("data") ||
+                params.get("context") ||
+                params.get("launch");
+
+            if (!possibleData) {
+                return false;
+            }
+
+            context =
+                JSON.parse(
+                    decodeURIComponent(
+                        possibleData
+                    )
+                );
+        }
+
+
+        if (!context ||
+            typeof context !== "object") {
+
+            return false;
+        }
+
+
+        /*
+         * Bridge information
+         */
+
+        if (context.bridge) {
+
+            if (context.bridge.nonce) {
+
+                gameState.bridgeNonce =
+                    context.bridge.nonce;
+            }
+
+            if (context.bridge.parentOrigin) {
+
+                gameState.parentOrigin =
+                    context.bridge.parentOrigin;
+            }
+        }
+
+
+        /*
+         * Main Chastify identifiers
+         */
+
+        if (context.appId) {
+
+            gameState.appId =
+                context.appId;
+        }
+
+        if (context.sessionId) {
+
+            gameState.sessionId =
+                context.sessionId;
+        }
+
+        if (context.lockId) {
+
+            gameState.lockId =
+                context.lockId;
+        }
+
+        if (
+            typeof context.mainToken === "string" &&
+            context.mainToken.length > 0
+        ) {
+
+            gameState.mainToken =
+                context.mainToken;
+        }
+
+
+        return true;
+
+    } catch {
+
+        return false;
+    }
 }
 
 
@@ -233,14 +425,28 @@ function sendToChastify(message) {
             return false;
         }
 
+        /*
+         * The nonce is required for the Chastify bridge.
+         */
+
+        if (
+            gameState.bridgeNonce &&
+            !message.nonce
+        ) {
+
+            message.nonce =
+                gameState.bridgeNonce;
+        }
+
         window.parent.postMessage(
             message,
+            gameState.parentOrigin ||
             CHASTIFY_ORIGIN
         );
 
         return true;
 
-    } catch (error) {
+    } catch {
 
         return false;
     }
@@ -272,58 +478,9 @@ function connectToChastify() {
         action:
             "setup.init",
 
-        payload: {},
-
-        nonce:
-            getChastifyNonce()
+        payload:
+            {}
     });
-}
-
-
-/* =========================================================
-   GET CHASTIFY NONCE
-   ========================================================= */
-
-function getChastifyNonce() {
-
-    try {
-
-        const hash =
-            window.location.hash;
-
-        if (!hash) {
-            return null;
-        }
-
-        const raw =
-            hash.startsWith("#")
-                ? hash.substring(1)
-                : hash;
-
-        const params =
-            new URLSearchParams(raw);
-
-        const context =
-            params.get("context");
-
-        if (!context) {
-            return null;
-        }
-
-        const decoded =
-            JSON.parse(
-                decodeURIComponent(context)
-            );
-
-        return (
-            decoded.bridge &&
-            decoded.bridge.nonce
-        ) || null;
-
-    } catch {
-
-        return null;
-    }
 }
 
 
@@ -386,6 +543,7 @@ function handleChastifyMessage(data) {
         return;
     }
 
+
     if (
         data.type ===
         "chastify:ext:resp"
@@ -406,15 +564,18 @@ function handleChastifyMessage(data) {
         return;
     }
 
+
     const messageType =
         data.type ||
         data.event ||
         data.action ||
         data.messageType;
 
+
     if (!messageType) {
         return;
     }
+
 
     if (
         messageType ===
@@ -430,6 +591,7 @@ function handleChastifyMessage(data) {
         return;
     }
 
+
     if (
         messageType ===
         "chastify:session:updated"
@@ -443,6 +605,7 @@ function handleChastifyMessage(data) {
 
         return;
     }
+
 
     if (
         messageType ===
@@ -473,17 +636,20 @@ function extractChastifyInformation(data) {
         return;
     }
 
+
     if (data.appId) {
 
         gameState.appId =
             data.appId;
     }
 
+
     if (data.lockId) {
 
         gameState.lockId =
             data.lockId;
     }
+
 
     const possibleSessionIds = [
 
@@ -500,6 +666,7 @@ function extractChastifyInformation(data) {
         data.data?.id
     ];
 
+
     for (
         const value of possibleSessionIds
     ) {
@@ -515,6 +682,7 @@ function extractChastifyInformation(data) {
             break;
         }
     }
+
 
     const possibleTokens = [
 
@@ -537,6 +705,7 @@ function extractChastifyInformation(data) {
         data.data?.token
     ];
 
+
     for (
         const value of possibleTokens
     ) {
@@ -556,7 +725,7 @@ function extractChastifyInformation(data) {
 
 
 /* =========================================================
-   CLOUDFLARE WORKER
+   SEND TIME CHANGE TO CLOUDFLARE
    ========================================================= */
 
 async function sendTimeChangeToWorker(
@@ -567,15 +736,21 @@ async function sendTimeChangeToWorker(
     minutes =
         Math.round(minutes);
 
+
     if (!minutes) {
 
         return false;
     }
 
+
     /*
-       The sessionId and mainToken are supplied
-       by Chastify when the game is launched.
-    */
+     * IMPORTANT:
+     *
+     * The sessionId and mainToken should have been obtained
+     * from the Chastify launch hash.
+     *
+     * Do NOT use GAME_TEST placeholders here.
+     */
 
     if (
         !gameState.sessionId ||
@@ -584,6 +759,7 @@ async function sendTimeChangeToWorker(
 
         return false;
     }
+
 
     const requestBody = {
 
@@ -618,6 +794,9 @@ async function sendTimeChangeToWorker(
                     headers: {
 
                         "Content-Type":
+                            "application/json",
+
+                        "Accept":
                             "application/json"
                     },
 
@@ -627,12 +806,6 @@ async function sendTimeChangeToWorker(
                         )
                 }
             );
-
-
-        if (!response.ok) {
-
-            return false;
-        }
 
 
         const responseText =
@@ -655,9 +828,15 @@ async function sendTimeChangeToWorker(
         }
 
 
+        if (!response.ok) {
+
+            return false;
+        }
+
+
         if (
             responseData &&
-            responseData.ok
+            responseData.ok === true
         ) {
 
             gameState.totalTimeChange +=
@@ -668,7 +847,6 @@ async function sendTimeChangeToWorker(
 
 
         return false;
-
 
     } catch {
 
@@ -689,9 +867,11 @@ async function changeChastifyTime(
     minutes =
         Math.round(minutes);
 
+
     if (!minutes) {
         return false;
     }
+
 
     return await sendTimeChangeToWorker(
         minutes,
@@ -715,6 +895,7 @@ function determineOutcome() {
             100
         );
 
+
     let neutralChance =
         clamp(
             Number(
@@ -723,6 +904,7 @@ function determineOutcome() {
             0,
             100
         );
+
 
     let punishmentChance =
         clamp(
@@ -733,23 +915,32 @@ function determineOutcome() {
             100
         );
 
+
     const total =
         rewardChance +
         neutralChance +
         punishmentChance;
+
 
     if (total <= 0) {
 
         return "neutral";
     }
 
-    const roll =
-        Math.random() * total;
 
-    if (roll < rewardChance) {
+    const roll =
+        Math.random() *
+        total;
+
+
+    if (
+        roll <
+        rewardChance
+    ) {
 
         return "reward";
     }
+
 
     if (
         roll <
@@ -759,6 +950,7 @@ function determineOutcome() {
 
         return "neutral";
     }
+
 
     return "punishment";
 }
@@ -976,10 +1168,13 @@ function performAction(action) {
         return;
     }
 
+
     gameState.totalActions++;
+
 
     const actionEvents =
         events[action];
+
 
     const baseEvent =
         actionEvents[
@@ -989,11 +1184,14 @@ function performAction(action) {
             )
         ];
 
+
     const rngOutcome =
         determineOutcome();
 
+
     let selectedEvent =
         baseEvent;
+
 
     if (
         rngOutcome !==
@@ -1007,7 +1205,10 @@ function performAction(action) {
                     rngOutcome
             );
 
-        if (matching.length > 0) {
+
+        if (
+            matching.length > 0
+        ) {
 
             selectedEvent =
                 matching[
@@ -1018,6 +1219,7 @@ function performAction(action) {
                 ];
         }
     }
+
 
     applyEvent(
         action,
@@ -1055,6 +1257,7 @@ async function applyEvent(
             );
     }
 
+
     if (event.water) {
 
         gameState.water =
@@ -1065,6 +1268,7 @@ async function applyEvent(
             );
     }
 
+
     if (event.food) {
 
         gameState.food =
@@ -1074,6 +1278,7 @@ async function applyEvent(
                 event.food
             );
     }
+
 
     if (event.materials) {
 
@@ -1092,6 +1297,7 @@ async function applyEvent(
 
     let timeChange =
         0;
+
 
     if (
         outcome ===
@@ -1125,7 +1331,9 @@ async function applyEvent(
         event.time !== undefined
     ) {
 
-        if (event.time < 0) {
+        if (
+            event.time < 0
+        ) {
 
             timeChange =
                 -randomNumber(
@@ -1133,7 +1341,9 @@ async function applyEvent(
                     settings.rewardMax
                 );
 
-        } else if (event.time > 0) {
+        } else if (
+            event.time > 0
+        ) {
 
             timeChange =
                 randomNumber(
@@ -1156,6 +1366,7 @@ async function applyEvent(
     let chastifyConfirmed =
         false;
 
+
     if (
         timeChange !== 0
     ) {
@@ -1174,6 +1385,7 @@ async function applyEvent(
 
     let title = "";
     let icon = "";
+
 
     if (
         outcome ===
@@ -1210,6 +1422,7 @@ async function applyEvent(
     let timeText =
         "";
 
+
     if (
         timeChange < 0
     ) {
@@ -1235,6 +1448,7 @@ async function applyEvent(
     let confirmationText =
         "";
 
+
     if (
         timeChange !== 0 &&
         !chastifyConfirmed
@@ -1253,7 +1467,7 @@ async function applyEvent(
 
         confirmationText =
             `<p style="color:#4caf50;">` +
-            `✅ Chastify received the time change.` +
+            `✅ Chastify accepted the time change.` +
             `</p>`;
     }
 
@@ -1263,14 +1477,17 @@ async function applyEvent(
             "result"
         );
 
+
     if (result) {
 
         result.className =
             `result ${outcome}`;
 
+
         result.classList.remove(
             "hidden"
         );
+
 
         result.innerHTML = `
 
@@ -1312,6 +1529,7 @@ async function applyEvent(
 
     gameState.day++;
 
+
     updateDisplay();
 }
 
@@ -1347,11 +1565,13 @@ function updateDisplay() {
             "day"
         );
 
+
     if (health) {
 
         health.textContent =
             gameState.health;
     }
+
 
     if (water) {
 
@@ -1359,17 +1579,20 @@ function updateDisplay() {
             gameState.water;
     }
 
+
     if (food) {
 
         food.textContent =
             gameState.food;
     }
 
+
     if (materials) {
 
         materials.textContent =
             gameState.materials;
     }
+
 
     if (day) {
 
@@ -1397,17 +1620,23 @@ function updateSettingsUI() {
         "punishmentMax"
     ];
 
+
     ids.forEach(
         id => {
 
             const element =
                 document.getElementById(id);
 
+
             if (!element) {
                 return;
             }
 
-            if (id === "difficulty") {
+
+            if (
+                id ===
+                "difficulty"
+            ) {
 
                 element.value =
                     settings.difficulty;
@@ -1475,6 +1704,7 @@ function saveSettings() {
             difficulty.value;
     }
 
+
     if (rewardChance) {
 
         settings.rewardChance =
@@ -1482,6 +1712,7 @@ function saveSettings() {
                 rewardChance.value
             );
     }
+
 
     if (neutralChance) {
 
@@ -1491,6 +1722,7 @@ function saveSettings() {
             );
     }
 
+
     if (punishmentChance) {
 
         settings.punishmentChance =
@@ -1498,6 +1730,7 @@ function saveSettings() {
                 punishmentChance.value
             );
     }
+
 
     if (rewardMin) {
 
@@ -1507,6 +1740,7 @@ function saveSettings() {
             );
     }
 
+
     if (rewardMax) {
 
         settings.rewardMax =
@@ -1515,6 +1749,7 @@ function saveSettings() {
             );
     }
 
+
     if (punishmentMin) {
 
         settings.punishmentMin =
@@ -1522,6 +1757,7 @@ function saveSettings() {
                 punishmentMin.value
             );
     }
+
 
     if (punishmentMax) {
 
@@ -1558,6 +1794,7 @@ function saveSettings() {
         document.getElementById(
             "settingsModal"
         );
+
 
     if (modal) {
 
@@ -1704,6 +1941,7 @@ function initializeActions() {
             ".action"
         );
 
+
     buttons.forEach(
         button => {
 
@@ -1713,6 +1951,7 @@ function initializeActions() {
 
                     const action =
                         this.dataset.action;
+
 
                     performAction(
                         action
@@ -1730,6 +1969,16 @@ function initializeActions() {
 
 function initializeGame() {
 
+    /*
+     * FIRST:
+     * Read sessionId/mainToken from the Chastify launch hash.
+     *
+     * This is the critical part.
+     */
+
+    parseChastifyLaunchContext();
+
+
     updateDisplay();
 
     initializeSettings();
@@ -1744,6 +1993,10 @@ function initializeGame() {
     ) {
 
         connectToChastify();
+
+    } else {
+
+        setConnectionStatus(false);
     }
 }
 
