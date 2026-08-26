@@ -1,56 +1,56 @@
-// ============================================================
-// LOST ISLAND V4
-// ============================================================
-
-// Leave this empty for now.
-// We will put your secure backend URL here later.
-//
-// DO NOT put your Chastify API token in this file.
-const API_BASE_URL = "";
+/* =========================================================
+   LOST ISLAND
+   Chastify Extension Bridge + Game Engine
+   Version 4.1
+   ========================================================= */
 
 
-// ============================================================
-// GAME STATE
-// ============================================================
+/* =========================================================
+   GAME SETTINGS
+   ========================================================= */
 
-const game = {
+const defaultSettings = {
+    difficulty: "normal",
 
-    day: 1,
+    rewardChance: 35,
+    neutralChance: 40,
+    punishmentChance: 25,
 
+    rewardMin: 30,
+    rewardMax: 60,
+
+    punishmentMin: 60,
+    punishmentMax: 300
+};
+
+let settings = { ...defaultSettings };
+
+
+/* =========================================================
+   GAME STATE
+   ========================================================= */
+
+let game = {
     health: 100,
     water: 2,
     food: 2,
     materials: 1,
+    day: 1,
 
-    discoveredLocations: [
-        "camp",
-        "westBeach",
-        "jungleEdge",
-        "wreck"
-    ],
+    actions: 0,
 
-    locationStates: {},
+    chastifyConnected: false,
+    sessionId: null,
+    lockId: null,
+    mainToken: null,
 
-    settings: {
-
-        difficulty: "normal",
-
-        rewardChance: 35,
-        neutralChance: 40,
-        punishmentChance: 25,
-
-        rewardMin: 30,
-        rewardMax: 60,
-
-        punishmentMin: 60,
-        punishmentMax: 300
-    }
+    config: {}
 };
 
 
-// ============================================================
-// DOM ELEMENTS
-// ============================================================
+/* =========================================================
+   DOM ELEMENTS
+   ========================================================= */
 
 const healthEl = document.getElementById("health");
 const waterEl = document.getElementById("water");
@@ -58,1124 +58,907 @@ const foodEl = document.getElementById("food");
 const materialsEl = document.getElementById("materials");
 const dayEl = document.getElementById("day");
 
+const storyEl = document.getElementById("story");
 const eventEl = document.getElementById("event");
 const resultEl = document.getElementById("result");
+const actionsEl = document.getElementById("actions");
+
+const connectionDot = document.getElementById("connectionDot");
+const connectionText = document.getElementById("connectionText");
+
+const settingsBtn = document.getElementById("settingsBtn");
+const settingsModal = document.getElementById("settingsModal");
+
+const saveSettingsBtn = document.getElementById("saveSettings");
+const closeSettingsBtn = document.getElementById("closeSettings");
 
 
-// ============================================================
-// SETTINGS
-// ============================================================
+/* =========================================================
+   UI
+   ========================================================= */
 
-const settingsBtn =
-    document.getElementById("settingsBtn");
+function updateUI() {
 
-const settingsModal =
-    document.getElementById("settingsModal");
+    healthEl.textContent = game.health;
+    waterEl.textContent = game.water;
+    foodEl.textContent = game.food;
+    materialsEl.textContent = game.materials;
+    dayEl.textContent = game.day;
 
-const saveSettings =
-    document.getElementById("saveSettings");
-
-const closeSettings =
-    document.getElementById("closeSettings");
+    updateConnectionUI();
+}
 
 
-settingsBtn.onclick = () => {
+function updateConnectionUI() {
+
+    if (game.chastifyConnected) {
+
+        connectionDot.classList.remove("offline");
+        connectionDot.classList.add("online");
+
+        connectionText.textContent =
+            "Chastify: Connected";
+
+    } else {
+
+        connectionDot.classList.remove("online");
+        connectionDot.classList.add("offline");
+
+        connectionText.textContent =
+            "Chastify: Offline";
+    }
+}
+
+
+/* =========================================================
+   CHASTIFY EXTENSION BRIDGE
+   ========================================================= */
+
+/*
+   Chastify communicates with extensions through postMessage.
+
+   We listen for messages from the parent window.
+
+   IMPORTANT:
+   We do NOT trust arbitrary messages.
+
+   The parent origin is checked when available.
+*/
+
+let chastifyParentOrigin = null;
+
+
+window.addEventListener("message", function(event) {
+
+    /*
+       Remember the origin of the Chastify parent.
+
+       When running directly on GitHub Pages there will normally
+       be no Chastify parent, so this remains unused.
+    */
+
+    if (!event.origin) {
+        return;
+    }
+
+
+    /*
+       Ignore messages that don't look like Chastify messages.
+    */
+
+    const data = event.data;
+
+    if (!data || typeof data !== "object") {
+        return;
+    }
+
+
+    /*
+       Log messages during development.
+
+       This is useful while testing the extension.
+    */
+
+    console.log("Lost Island received message:", data);
+
+
+    /*
+       Setup initialization
+    */
+
+    if (data.type === "chastify:ext:setup:init") {
+
+        handleSetupInit(data, event);
+
+        return;
+    }
+
+
+    /*
+       Runtime/session initialization.
+
+       Different Chastify versions may provide slightly
+       different message structures, so we handle common forms.
+    */
+
+    if (
+        data.type === "chastify:ext:init" ||
+        data.type === "chastify:ext:session:init" ||
+        data.type === "chastify:ext:launch"
+    ) {
+
+        handleExtensionInit(data, event);
+
+        return;
+    }
+
+
+    /*
+       Session updates
+    */
+
+    if (
+        data.type === "chastify:ext:session:update" ||
+        data.type === "chastify:ext:session:updated"
+    ) {
+
+        handleSessionUpdate(data);
+
+        return;
+    }
+
+});
+
+
+/* =========================================================
+   SETUP HANDLER
+   ========================================================= */
+
+function handleSetupInit(data, event) {
+
+    console.log("Chastify setup initialized.");
+
+    chastifyParentOrigin = event.origin;
+
+    game.chastifyConnected = true;
+
+    updateConnectionUI();
+
+
+    /*
+       Chastify expects the extension to provide its configuration.
+
+       Our current game has no required configuration yet,
+       so we return an empty object.
+    */
+
+    sendToChastify(
+        {
+            type: "chastify:ext:setup:config",
+            config: {}
+        },
+        event.source,
+        event.origin
+    );
+}
+
+
+/* =========================================================
+   EXTENSION INIT
+   ========================================================= */
+
+function handleExtensionInit(data, event) {
+
+    console.log("Chastify extension initialized:", data);
+
+    chastifyParentOrigin = event.origin;
+
+    game.chastifyConnected = true;
+
+
+    /*
+       Try to locate the session information.
+
+       Chastify may place this directly in the message
+       or inside a payload object.
+    */
+
+    const payload = data.payload || data;
+
+
+    game.sessionId =
+        payload.sessionId ||
+        payload.session_id ||
+        null;
+
+    game.lockId =
+        payload.lockId ||
+        payload.lock_id ||
+        null;
+
+    game.mainToken =
+        payload.mainToken ||
+        payload.main_token ||
+        null;
+
+
+    /*
+       Save configuration if Chastify supplied it.
+    */
+
+    if (payload.config) {
+
+        game.config = payload.config;
+
+    }
+
+
+    console.log("Lost Island session:", {
+        sessionId: game.sessionId,
+        lockId: game.lockId,
+        hasMainToken: !!game.mainToken,
+        config: game.config
+    });
+
+
+    updateConnectionUI();
+
+
+    /*
+       Display a small connection confirmation in the game.
+    */
+
+    showConnectionMessage();
+}
+
+
+/* =========================================================
+   SESSION UPDATE
+   ========================================================= */
+
+function handleSessionUpdate(data) {
+
+    console.log("Chastify session update:", data);
+
+    const payload = data.payload || data;
+
+    if (payload.sessionId) {
+        game.sessionId = payload.sessionId;
+    }
+
+    if (payload.lockId) {
+        game.lockId = payload.lockId;
+    }
+
+    if (payload.config) {
+        game.config = payload.config;
+    }
+
+    game.chastifyConnected = true;
+
+    updateConnectionUI();
+}
+
+
+/* =========================================================
+   SEND MESSAGE TO CHASTIFY
+   ========================================================= */
+
+function sendToChastify(message, targetWindow, targetOrigin) {
+
+    /*
+       If we're running directly on GitHub Pages,
+       there is no Chastify parent.
+    */
+
+    if (!window.parent || window.parent === window) {
+
+        console.log(
+            "Lost Island is running outside Chastify:",
+            message
+        );
+
+        return;
+    }
+
+
+    const destination =
+        targetWindow || window.parent;
+
+    const origin =
+        targetOrigin ||
+        chastifyParentOrigin ||
+        "*";
+
+
+    destination.postMessage(
+        message,
+        origin
+    );
+
+}
+
+
+/* =========================================================
+   CONNECTION MESSAGE
+   ========================================================= */
+
+function showConnectionMessage() {
+
+    resultEl.className = "result reward";
+
+    resultEl.innerHTML = `
+        <strong>🔗 Chastify connected</strong>
+
+        <p>
+            Lost Island is running inside Chastify.
+        </p>
+
+        ${
+            game.sessionId
+                ? `<p>Session detected ✓</p>`
+                : `<p>Session information not detected yet.</p>`
+        }
+
+        <p>
+            Time control is not active yet.
+        </p>
+    `;
+
+    resultEl.classList.remove("hidden");
+}
+
+
+/* =========================================================
+   GAME ACTIONS
+   ========================================================= */
+
+document.querySelectorAll(".action").forEach(button => {
+
+    button.addEventListener("click", function() {
+
+        const action = this.dataset.action;
+
+        performAction(action);
+
+    });
+
+});
+
+
+function performAction(action) {
+
+    game.actions++;
+
+    clearResult();
+
+    switch (action) {
+
+        case "water":
+            searchWater();
+            break;
+
+        case "explore":
+            explore();
+            break;
+
+        case "materials":
+            gatherMaterials();
+            break;
+
+        case "wreck":
+            investigateWreck();
+            break;
+
+        case "camp":
+            workOnCamp();
+            break;
+
+        default:
+            console.warn("Unknown action:", action);
+    }
+
+    updateUI();
+}
+
+
+/* =========================================================
+   WATER
+   ========================================================= */
+
+function searchWater() {
+
+    const roll = Math.random() * 100;
+
+    if (roll < 60) {
+
+        game.water += 2;
+
+        showResult(
+            "reward",
+            "💧 Water found!",
+            "You discover a small freshwater source hidden among the rocks.",
+            "+2 Water"
+        );
+
+    } else if (roll < 85) {
+
+        showResult(
+            "neutral",
+            "💧 No luck.",
+            "You search for a long time but find nothing useful.",
+            "+0 Water"
+        );
+
+    } else {
+
+        game.health -= 5;
+
+        triggerRngOutcome(
+            "water",
+            "☠️ Something went wrong.",
+            "While searching for water you become disoriented and injure yourself."
+        );
+    }
+}
+
+
+/* =========================================================
+   EXPLORE
+   ========================================================= */
+
+function explore() {
+
+    const roll = Math.random() * 100;
+
+    if (roll < 45) {
+
+        game.materials += 1;
+
+        showResult(
+            "reward",
+            "🌴 Useful discovery!",
+            "You find a promising path deeper into the island.",
+            "+1 Materials"
+        );
+
+    } else if (roll < 75) {
+
+        showResult(
+            "neutral",
+            "🌴 Nothing useful.",
+            "The jungle leads nowhere. You return to camp.",
+            "+0"
+        );
+
+    } else {
+
+        game.health -= 10;
+
+        triggerRngOutcome(
+            "explore",
+            "⚠️ Dangerous exploration.",
+            "You slip on wet rocks and hurt yourself."
+        );
+    }
+}
+
+
+/* =========================================================
+   MATERIALS
+   ========================================================= */
+
+function gatherMaterials() {
+
+    const roll = Math.random() * 100;
+
+    if (roll < 65) {
+
+        game.materials += 2;
+
+        showResult(
+            "reward",
+            "🪵 Materials found!",
+            "You collect branches, vines and useful pieces of wood.",
+            "+2 Materials"
+        );
+
+    } else if (roll < 90) {
+
+        showResult(
+            "neutral",
+            "🪵 Poor harvest.",
+            "You find very little that can actually be used.",
+            "+0 Materials"
+        );
+
+    } else {
+
+        game.health -= 5;
+
+        triggerRngOutcome(
+            "materials",
+            "🩸 You get injured.",
+            "A sharp branch cuts your hand while gathering materials."
+        );
+    }
+}
+
+
+/* =========================================================
+   WRECK
+   ========================================================= */
+
+function investigateWreck() {
+
+    const roll = Math.random() * 100;
+
+    if (roll < 50) {
+
+        game.materials += 3;
+
+        showResult(
+            "reward",
+            "⚓ Salvage!",
+            "You recover useful parts from the wreckage.",
+            "+3 Materials"
+        );
+
+    } else if (roll < 80) {
+
+        showResult(
+            "neutral",
+            "⚓ Nothing useful.",
+            "The remaining wreckage is badly damaged.",
+            "+0"
+        );
+
+    } else {
+
+        game.health -= 8;
+
+        triggerRngOutcome(
+            "wreck",
+            "⚠️ The wreck shifts!",
+            "A piece of the wreck collapses while you search it."
+        );
+    }
+}
+
+
+/* =========================================================
+   CAMP
+   ========================================================= */
+
+function workOnCamp() {
+
+    if (game.materials >= 2) {
+
+        game.materials -= 2;
+
+        showResult(
+            "reward",
+            "🏕️ Camp improved!",
+            "You strengthen your shelter against the night.",
+            "-2 Materials / Better shelter"
+        );
+
+    } else {
+
+        showResult(
+            "neutral",
+            "🏕️ Not enough materials.",
+            "You don't have enough materials to make meaningful improvements.",
+            "+0"
+        );
+    }
+}
+
+
+/* =========================================================
+   RNG OUTCOME
+   ========================================================= */
+
+function triggerRngOutcome(action, title, description) {
+
+    const roll = Math.random() * 100;
+
+    const rewardChance = settings.rewardChance;
+
+    const neutralChance =
+        rewardChance + settings.neutralChance;
+
+
+    if (roll < rewardChance) {
+
+        showRewardOutcome(action);
+
+    } else if (roll < neutralChance) {
+
+        showResult(
+            "neutral",
+            "😐 A close call.",
+            description,
+            "+0 time"
+        );
+
+    } else {
+
+        showPunishmentOutcome(action, title, description);
+
+    }
+}
+
+
+/* =========================================================
+   REWARD OUTCOME
+   ========================================================= */
+
+function showRewardOutcome(action) {
+
+    const minutes = randomInt(
+        settings.rewardMin,
+        settings.rewardMax
+    );
+
+    showResult(
+        "reward",
+        "🍀 Lucky break!",
+        "Something unexpectedly works in your favor.",
+        `Potential reward: -${minutes} minutes`
+    );
+
+
+    /*
+       IMPORTANT:
+
+       We only display the calculated value right now.
+
+       We are NOT sending it to Chastify yet.
+
+       Once the bridge/backend is confirmed, this function
+       will call the secure time-action endpoint.
+    */
+
+    console.log(
+        "REWARD:",
+        minutes,
+        "minutes",
+        "Action:",
+        action
+    );
+}
+
+
+/* =========================================================
+   PUNISHMENT OUTCOME
+   ========================================================= */
+
+function showPunishmentOutcome(action, title, description) {
+
+    const minutes = randomInt(
+        settings.punishmentMin,
+        settings.punishmentMax
+    );
+
+    showResult(
+        "punishment",
+        title,
+        description,
+        `Potential punishment: +${minutes} minutes`
+    );
+
+
+    /*
+       Same security rule:
+
+       Do not call the Chastify API directly from this
+       browser code.
+
+       The backend will eventually handle this.
+    */
+
+    console.log(
+        "PUNISHMENT:",
+        minutes,
+        "minutes",
+        "Action:",
+        action
+    );
+}
+
+
+/* =========================================================
+   RESULT DISPLAY
+   ========================================================= */
+
+function showResult(type, title, description, consequence) {
+
+    resultEl.className = `result ${type}`;
+
+    resultEl.innerHTML = `
+        <h3>${title}</h3>
+
+        <p>${description}</p>
+
+        <strong>${consequence}</strong>
+    `;
+
+    resultEl.classList.remove("hidden");
+}
+
+
+function clearResult() {
+
+    resultEl.className = "result hidden";
+    resultEl.innerHTML = "";
+
+}
+
+
+/* =========================================================
+   RANDOM INTEGER
+   ========================================================= */
+
+function randomInt(min, max) {
+
+    min = Number(min);
+    max = Number(max);
+
+    if (min > max) {
+        [min, max] = [max, min];
+    }
+
+    return Math.floor(
+        Math.random() * (max - min + 1)
+    ) + min;
+}
+
+
+/* =========================================================
+   SETTINGS
+   ========================================================= */
+
+settingsBtn.addEventListener("click", function() {
+
+    loadSettingsIntoForm();
 
     settingsModal.classList.remove("hidden");
 
-};
+});
 
 
-closeSettings.onclick = () => {
+closeSettingsBtn.addEventListener("click", function() {
 
     settingsModal.classList.add("hidden");
 
-};
+});
 
 
-saveSettings.onclick = () => {
+saveSettingsBtn.addEventListener("click", function() {
 
-    game.settings.difficulty =
+    saveSettings();
+
+    settingsModal.classList.add("hidden");
+
+});
+
+
+function loadSettingsIntoForm() {
+
+    document.getElementById("difficulty").value =
+        settings.difficulty;
+
+    document.getElementById("rewardChance").value =
+        settings.rewardChance;
+
+    document.getElementById("neutralChance").value =
+        settings.neutralChance;
+
+    document.getElementById("punishmentChance").value =
+        settings.punishmentChance;
+
+    document.getElementById("rewardMin").value =
+        settings.rewardMin;
+
+    document.getElementById("rewardMax").value =
+        settings.rewardMax;
+
+    document.getElementById("punishmentMin").value =
+        settings.punishmentMin;
+
+    document.getElementById("punishmentMax").value =
+        settings.punishmentMax;
+}
+
+
+function saveSettings() {
+
+    settings.difficulty =
         document.getElementById("difficulty").value;
 
-    game.settings.rewardChance =
-        Number(
-            document.getElementById("rewardChance").value
-        );
+    settings.rewardChance =
+        Number(document.getElementById("rewardChance").value);
 
-    game.settings.neutralChance =
-        Number(
-            document.getElementById("neutralChance").value
-        );
+    settings.neutralChance =
+        Number(document.getElementById("neutralChance").value);
 
-    game.settings.punishmentChance =
-        Number(
-            document.getElementById("punishmentChance").value
-        );
+    settings.punishmentChance =
+        Number(document.getElementById("punishmentChance").value);
 
-    game.settings.rewardMin =
-        Number(
-            document.getElementById("rewardMin").value
-        );
+    settings.rewardMin =
+        Number(document.getElementById("rewardMin").value);
 
-    game.settings.rewardMax =
-        Number(
-            document.getElementById("rewardMax").value
-        );
+    settings.rewardMax =
+        Number(document.getElementById("rewardMax").value);
 
-    game.settings.punishmentMin =
-        Number(
-            document.getElementById("punishmentMin").value
-        );
+    settings.punishmentMin =
+        Number(document.getElementById("punishmentMin").value);
 
-    game.settings.punishmentMax =
-        Number(
-            document.getElementById("punishmentMax").value
-        );
+    settings.punishmentMax =
+        Number(document.getElementById("punishmentMax").value);
 
+
+    /*
+       Make sure the RNG percentages add up correctly.
+    */
 
     const total =
-        game.settings.rewardChance +
-        game.settings.neutralChance +
-        game.settings.punishmentChance;
+        settings.rewardChance +
+        settings.neutralChance +
+        settings.punishmentChance;
 
 
     if (total !== 100) {
 
         alert(
-            "Reward + Neutral + Punishment must equal 100%."
+            "Reward %, Neutral % and Punishment % must add up to 100%."
         );
 
         return;
     }
 
 
-    localStorage.setItem(
-        "lostIslandSettings",
-        JSON.stringify(game.settings)
+    console.log(
+        "Settings saved:",
+        settings
     );
-
-
-    settingsModal.classList.add("hidden");
-
-
-    showMessage(
-        "⚙️ Settings saved.",
-        "neutral"
-    );
-
-};
-
-
-// ============================================================
-// LOAD SETTINGS
-// ============================================================
-
-function loadSettings() {
-
-    const saved =
-        localStorage.getItem(
-            "lostIslandSettings"
-        );
-
-
-    if (!saved) {
-
-        return;
-
-    }
-
-
-    try {
-
-        game.settings =
-            JSON.parse(saved);
-
-
-        document.getElementById("difficulty").value =
-            game.settings.difficulty;
-
-        document.getElementById("rewardChance").value =
-            game.settings.rewardChance;
-
-        document.getElementById("neutralChance").value =
-            game.settings.neutralChance;
-
-        document.getElementById("punishmentChance").value =
-            game.settings.punishmentChance;
-
-        document.getElementById("rewardMin").value =
-            game.settings.rewardMin;
-
-        document.getElementById("rewardMax").value =
-            game.settings.rewardMax;
-
-        document.getElementById("punishmentMin").value =
-            game.settings.punishmentMin;
-
-        document.getElementById("punishmentMax").value =
-            game.settings.punishmentMax;
-
-    }
-
-    catch (error) {
-
-        console.error(
-            "Could not load settings:",
-            error
-        );
-
-    }
-
 }
 
 
-// ============================================================
-// ACTION BUTTONS
-// ============================================================
+/* =========================================================
+   INITIALIZE
+   ========================================================= */
 
-document
-    .querySelectorAll(".action")
-    .forEach(button => {
-
-        button.addEventListener(
-            "click",
-            () => {
-
-                const action =
-                    button.dataset.action;
-
-                performAction(action);
-
-            }
-        );
-
-    });
-
-
-// ============================================================
-// ACTION ENGINE
-// ============================================================
-
-function performAction(action) {
-
-    disableActions();
-
-
-    eventEl.classList.add(
-        "hidden"
-    );
-
-
-    const outcomes =
-        getActionOutcomes(action);
-
-
-    const result =
-        rollOutcome();
-
-
-    const outcome =
-        outcomes[result];
-
-
-    applyOutcome(outcome);
-
-
-    advanceDay();
-
+function initializeGame() {
 
     updateUI();
 
+    console.log("🏝️ Lost Island initialized.");
 
-    setTimeout(
-        enableActions,
-        400
+    console.log(
+        "Running inside iframe:",
+        window.parent !== window
     );
 
-}
-
-
-// ============================================================
-// ACTION OUTCOMES
-// ============================================================
-
-function getActionOutcomes(action) {
-
-    switch (action) {
-
-
-        // ----------------------------------------------------
-        // WATER
-        // ----------------------------------------------------
-
-        case "water":
-
-            return {
-
-                reward: {
-
-                    type: "reward",
-
-                    title:
-                        "💧 Water Found",
-
-                    text:
-                        "You discover a small freshwater source hidden among the rocks.",
-
-                    changes: {
-
-                        water: 2
-
-                    },
-
-                    time: -60
-                },
-
-
-                neutral: {
-
-                    type: "neutral",
-
-                    title:
-                        "💧 No Luck",
-
-                    text:
-                        "You spend hours searching but find no usable water.",
-
-                    changes: {},
-
-                    time: 0
-                },
-
-
-                punishment: {
-
-                    type: "punishment",
-
-                    title:
-                        "⚠️ Dangerous Terrain",
-
-                    text:
-                        "You slip while searching and injure yourself.",
-
-                    changes: {
-
-                        health: -10
-
-                    },
-
-                    time: 180
-                }
-
-            };
-
-
-        // ----------------------------------------------------
-        // EXPLORE
-        // ----------------------------------------------------
-
-        case "explore":
-
-            return {
-
-                reward: {
-
-                    type: "reward",
-
-                    title:
-                        "🌴 New Discovery",
-
-                    text:
-                        "You find a narrow trail leading deeper into the island.",
-
-                    changes: {},
-
-                    discover:
-                        "deepJungle",
-
-                    time: -30
-                },
-
-
-                neutral: {
-
-                    type: "neutral",
-
-                    title:
-                        "🌴 Nothing New",
-
-                    text:
-                        "You explore for hours but find nothing particularly useful.",
-
-                    changes: {},
-
-                    time: 0
-                },
-
-
-                punishment: {
-
-                    type: "punishment",
-
-                    title:
-                        "🐍 Something Moves",
-
-                    text:
-                        "You disturb something in the undergrowth and retreat with a painful injury.",
-
-                    changes: {
-
-                        health: -15
-
-                    },
-
-                    time: 240
-                }
-
-            };
-
-
-        // ----------------------------------------------------
-        // MATERIALS
-        // ----------------------------------------------------
-
-        case "materials":
-
-            return {
-
-                reward: {
-
-                    type: "reward",
-
-                    title:
-                        "🪵 Useful Materials",
-
-                    text:
-                        "You find plenty of dry wood and useful pieces of debris.",
-
-                    changes: {
-
-                        materials: 2
-
-                    },
-
-                    time: -30
-                },
-
-
-                neutral: {
-
-                    type: "neutral",
-
-                    title:
-                        "🪵 Slim Pickings",
-
-                    text:
-                        "You find a few pieces of wood, but nothing particularly useful.",
-
-                    changes: {
-
-                        materials: 1
-
-                    },
-
-                    time: 0
-                },
-
-
-                punishment: {
-
-                    type: "punishment",
-
-                    title:
-                        "🪵 Injury",
-
-                    text:
-                        "A piece of debris shifts unexpectedly and injures your hand.",
-
-                    changes: {
-
-                        health: -8
-
-                    },
-
-                    time: 120
-                }
-
-            };
-
-
-        // ----------------------------------------------------
-        // WRECK
-        // ----------------------------------------------------
-
-        case "wreck":
-
-            return {
-
-                reward: {
-
-                    type: "reward",
-
-                    title:
-                        "⚓ Valuable Discovery",
-
-                    text:
-                        "You discover an intact container inside the wreck.",
-
-                    changes: {
-
-                        materials: 2
-
-                    },
-
-                    time: -60
-                },
-
-
-                neutral: {
-
-                    type: "neutral",
-
-                    title:
-                        "⚓ Nothing Useful",
-
-                    text:
-                        "The wreck is more damaged than you thought. You find nothing useful.",
-
-                    changes: {},
-
-                    time: 0
-                },
-
-
-                punishment: {
-
-                    type: "punishment",
-
-                    title:
-                        "⚠️ The Wreck Shifts",
-
-                    text:
-                        "Part of the wreck collapses while you are searching.",
-
-                    changes: {
-
-                        health: -20
-
-                    },
-
-                    time: 300
-                }
-
-            };
-
-
-        // ----------------------------------------------------
-        // CAMP
-        // ----------------------------------------------------
-
-        case "camp":
-
-            return {
-
-                reward: {
-
-                    type: "reward",
-
-                    title:
-                        "🏕️ Camp Improved",
-
-                    text:
-                        "You reinforce your shelter and make the camp more secure.",
-
-                    changes: {
-
-                        health: 5
-
-                    },
-
-                    time: -30
-                },
-
-
-                neutral: {
-
-                    type: "neutral",
-
-                    title:
-                        "🏕️ A Quiet Day",
-
-                    text:
-                        "You spend the day maintaining your camp.",
-
-                    changes: {},
-
-                    time: 0
-                },
-
-
-                punishment: {
-
-                    type: "punishment",
-
-                    title:
-                        "🌧️ The Storm",
-
-                    text:
-                        "A sudden storm damages part of your shelter.",
-
-                    changes: {
-
-                        materials: -1
-
-                    },
-
-                    time: 120
-                }
-
-            };
-
-    }
-
-
-    return null;
-
-}
-
-
-// ============================================================
-// RNG
-// ============================================================
-
-function rollOutcome() {
-
-    const random =
-        Math.random() * 100;
-
-
-    const reward =
-        game.settings.rewardChance;
-
-
-    const neutral =
-        reward +
-        game.settings.neutralChance;
-
-
-    if (random < reward) {
-
-        return "reward";
-
-    }
-
-
-    if (random < neutral) {
-
-        return "neutral";
-
-    }
-
-
-    return "punishment";
-
-}
-
-
-// ============================================================
-// APPLY OUTCOME
-// ============================================================
-
-function applyOutcome(outcome) {
-
-    if (!outcome) {
-
-        return;
-
-    }
-
-
-    // Apply resource changes
-
-    if (outcome.changes) {
-
-        Object.keys(
-            outcome.changes
-        )
-        .forEach(key => {
-
-            game[key] +=
-                outcome.changes[key];
-
-        });
-
-    }
-
-
-    // Discover new location
-
-    if (outcome.discover) {
-
-        discoverLocation(
-            outcome.discover
-        );
-
-    }
-
-
-    // Show result
-
-    showMessage(
-
-        `
-        <h2>${outcome.title}</h2>
-
-        <p>
-            ${outcome.text}
-        </p>
-
-        ${
-            outcome.time !== 0
-
-            ?
-
-            `
-            <strong>
-                🔒 ${formatTimeChange(outcome.time)}
-            </strong>
-            `
-
-            :
-
-            ""
-        }
-        `,
-
-        outcome.type
-
-    );
-
-
-    // Send time change to Chastify
-
-    if (outcome.time !== 0) {
-
-        changeChastifyTime(
-
-            outcome.time,
-
-            outcome.title
-
-        );
-
-    }
-
-}
-
-
-// ============================================================
-// CHASTIFY CONNECTION
-// ============================================================
-
-async function changeChastifyTime(
-    seconds,
-    reason
-) {
 
     /*
-        V4 DEMO MODE
+       If we're inside an iframe, announce that the game
+       is ready.
 
-        Until we connect the backend,
-        the game simply records the
-        requested time change in the
-        browser console.
-
-        Example:
-
-        -60 = remove 1 hour
-        +180 = add 3 minutes
-
-        IMPORTANT:
-        The Chastify API token must NEVER
-        be placed in this file.
+       This does not expose any secret API key.
     */
 
+    if (window.parent !== window) {
 
-    if (!API_BASE_URL) {
+        sendToChastify({
 
-        console.log(
-            "Chastify time change:",
-            seconds,
-            "seconds",
-            reason
-        );
-
-        return;
-
-    }
-
-
-    try {
-
-        const response =
-            await fetch(
-
-                `${API_BASE_URL}/api/time`,
-
-                {
-
-                    method:
-                        "POST",
-
-                    headers: {
-
-                        "Content-Type":
-                            "application/json"
-
-                    },
-
-                    body:
-                        JSON.stringify({
-
-                            deltaSeconds:
-                                seconds,
-
-                            reason:
-                                reason
-
-                        })
-
-                }
-
-            );
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                `HTTP ${response.status}`
-            );
-
-        }
-
-
-        const data =
-            await response.json();
-
-
-        console.log(
-            "Chastify response:",
-            data
-        );
-
-
-        setConnectionStatus(
-            true
-        );
-
-    }
-
-
-    catch (error) {
-
-        console.error(
-            "Chastify connection failed:",
-            error
-        );
-
-
-        setConnectionStatus(
-            false
-        );
-
-    }
-
-}
-
-
-// ============================================================
-// LOCATION SYSTEM
-// ============================================================
-
-function discoverLocation(
-    location
-) {
-
-    if (
-        game.discoveredLocations
-            .includes(location)
-    ) {
-
-        return;
-
-    }
-
-
-    game.discoveredLocations.push(
-        location
-    );
-
-
-    const names = {
-
-        deepJungle:
-            "🌴 Deep Jungle",
-
-        spring:
-            "💧 Freshwater Spring",
-
-        cave:
-            "🕳️ Cave",
-
-        hiddenCove:
-            "🏝️ Hidden Cove",
-
-        rockyCoast:
-            "🪨 Rocky Coast",
-
-        mountain:
-            "⛰️ Mountain Ridge",
-
-        signalStation:
-            "📡 Signal Station",
-
-        crater:
-            "🌋 Volcanic Crater"
-
-    };
-
-
-    showMessage(
-
-        `
-        <h2>
-            🗺️ New Location Discovered
-        </h2>
-
-        <p>
-            You discovered:
-            <strong>
-                ${names[location] || location}
-            </strong>
-        </p>
-        `,
-
-        "reward"
-
-    );
-
-}
-
-
-// ============================================================
-// DAY
-// ============================================================
-
-function advanceDay() {
-
-    game.day++;
-
-}
-
-
-// ============================================================
-// SHOW MESSAGE
-// ============================================================
-
-function showMessage(
-    html,
-    type
-) {
-
-    resultEl.innerHTML =
-        html;
-
-
-    resultEl.className =
-        `result ${type}`;
-
-
-    resultEl.classList.remove(
-        "hidden"
-    );
-
-}
-
-
-// ============================================================
-// TIME FORMAT
-// ============================================================
-
-function formatTimeChange(
-    seconds
-) {
-
-    const absolute =
-        Math.abs(seconds);
-
-
-    const minutes =
-        Math.round(
-            absolute / 60
-        );
-
-
-    const hours =
-        Math.floor(
-            minutes / 60
-        );
-
-
-    const remaining =
-        minutes % 60;
-
-
-    const sign =
-        seconds < 0
-            ? "−"
-            : "+";
-
-
-    if (hours > 0) {
-
-        return (
-            `${sign}${hours}h ${remaining}m`
-        );
-
-    }
-
-
-    return (
-        `${sign}${remaining} min`
-    );
-
-}
-
-
-// ============================================================
-// UI UPDATE
-// ============================================================
-
-function updateUI() {
-
-    healthEl.textContent =
-        Math.max(
-            0,
-            game.health
-        );
-
-
-    waterEl.textContent =
-        Math.max(
-            0,
-            game.water
-        );
-
-
-    foodEl.textContent =
-        Math.max(
-            0,
-            game.food
-        );
-
-
-    materialsEl.textContent =
-        Math.max(
-            0,
-            game.materials
-        );
-
-
-    dayEl.textContent =
-        game.day;
-
-}
-
-
-// ============================================================
-// DISABLE / ENABLE ACTIONS
-// ============================================================
-
-function disableActions() {
-
-    document
-        .querySelectorAll(".action")
-        .forEach(button => {
-
-            button.disabled = true;
+            type: "chastify:ext:ready"
 
         });
 
-}
-
-
-function enableActions() {
-
-    document
-        .querySelectorAll(".action")
-        .forEach(button => {
-
-            button.disabled = false;
-
-        });
-
-}
-
-
-// ============================================================
-// CHASTIFY STATUS
-// ============================================================
-
-function setConnectionStatus(
-    online
-) {
-
-    const dot =
-        document.getElementById(
-            "connectionDot"
-        );
-
-
-    const text =
-        document.getElementById(
-            "connectionText"
-        );
-
-
-    if (online) {
-
-        dot.className =
-            "dot online";
-
-
-        text.textContent =
-            "Chastify: Connected";
-
     }
-
-    else {
-
-        dot.className =
-            "dot offline";
-
-
-        text.textContent =
-            "Chastify: Offline";
-
-    }
-
 }
 
 
-// ============================================================
-// START GAME
-// ============================================================
-
-loadSettings();
-
-updateUI();
-
-setConnectionStatus(
-    false
-);
+initializeGame();
