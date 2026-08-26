@@ -87,6 +87,23 @@ const difficultySettings = {
 
 
 /* =========================================================
+   CHASTIFY CONNECTION STATE
+   ========================================================= */
+
+const chastify = {
+
+    connected: false,
+
+    appId: null,
+    lockId: null,
+
+    pendingRequests: new Map(),
+
+    requestTimeout: 10000
+};
+
+
+/* =========================================================
    UTILITY
    ========================================================= */
 
@@ -187,9 +204,13 @@ function showDebug(message) {
 function setConnectionStatus(connected) {
 
     gameState.chastifyConnected = connected;
+    chastify.connected = connected;
 
-    const dot = document.getElementById("connectionDot");
-    const text = document.getElementById("connectionText");
+    const dot =
+        document.getElementById("connectionDot");
+
+    const text =
+        document.getElementById("connectionText");
 
     if (!dot || !text) {
         return;
@@ -200,29 +221,56 @@ function setConnectionStatus(connected) {
         dot.classList.remove("offline");
         dot.classList.add("online");
 
-        text.textContent = "Chastify: Connected";
+        text.textContent =
+            "Chastify: Connected";
 
     } else {
 
         dot.classList.remove("online");
         dot.classList.add("offline");
 
-        text.textContent = "Chastify: Offline";
+        text.textContent =
+            "Chastify: Offline";
     }
 }
 
 
 /* =========================================================
-   CHASTIFY MESSAGE HELPERS
+   GENERATE REQUEST ID
+   ========================================================= */
+
+function generateRequestId() {
+
+    if (window.crypto &&
+        crypto.randomUUID) {
+
+        return crypto.randomUUID();
+    }
+
+    return (
+        Date.now().toString(36) +
+        "-" +
+        Math.random().toString(36).substring(2)
+    );
+}
+
+
+/* =========================================================
+   SEND MESSAGE TO CHASTIFY
    ========================================================= */
 
 function sendToChastify(message) {
 
     try {
 
-        if (!window.parent || window.parent === window) {
+        if (
+            !window.parent ||
+            window.parent === window
+        ) {
 
-            showDebug("Not running inside an iframe.");
+            showDebug(
+                "Not running inside an iframe."
+            );
 
             return false;
         }
@@ -234,7 +282,11 @@ function sendToChastify(message) {
 
         showDebug(
             "SENT TO CHASTIFY:\n" +
-            JSON.stringify(message, null, 2)
+            JSON.stringify(
+                message,
+                null,
+                2
+            )
         );
 
         return true;
@@ -252,131 +304,329 @@ function sendToChastify(message) {
 
 
 /* =========================================================
-   CHASTIFY SETUP HANDSHAKE
+   CHASTIFY REQUEST
    ========================================================= */
 
-function requestSetup() {
+function chastifyRequest(action, payload = {}) {
 
-    showDebug("Requesting Chastify setup...");
+    return new Promise(
+        function(resolve, reject) {
 
-    sendToChastify({
+            const id =
+                generateRequestId();
 
-        type: "chastify:ext:setup:init"
+            const message = {
 
-    });
+                type:
+                    "chastify:ext:req",
+
+                v: 1,
+
+                id: id,
+
+                action: action,
+
+                payload: payload
+            };
+
+
+            const timeout =
+                setTimeout(
+                    function() {
+
+                        chastify.pendingRequests.delete(
+                            id
+                        );
+
+                        reject(
+                            new Error(
+                                "Chastify request timed out: " +
+                                action
+                            )
+                        );
+
+                    },
+                    chastify.requestTimeout
+                );
+
+
+            chastify.pendingRequests.set(
+                id,
+                {
+                    resolve: resolve,
+                    reject: reject,
+                    timeout: timeout,
+                    action: action
+                }
+            );
+
+
+            const sent =
+                sendToChastify(message);
+
+
+            if (!sent) {
+
+                clearTimeout(timeout);
+
+                chastify.pendingRequests.delete(
+                    id
+                );
+
+                reject(
+                    new Error(
+                        "Unable to send request to Chastify."
+                    )
+                );
+            }
+        }
+    );
 }
 
 
 /* =========================================================
-   SETUP CONFIG RESPONSE
+   HANDLE CHASTIFY RESPONSE
    ========================================================= */
 
-function sendSetupConfig() {
-
-    const config = {
-
-        difficulty: settings.difficulty,
-
-        rewardChance: settings.rewardChance,
-        neutralChance: settings.neutralChance,
-        punishmentChance: settings.punishmentChance,
-
-        rewardMin: settings.rewardMin,
-        rewardMax: settings.rewardMax,
-
-        punishmentMin: settings.punishmentMin,
-        punishmentMax: settings.punishmentMax
-    };
-
-    sendToChastify({
-
-        type: "chastify:ext:setup:config",
-
-        config: config
-
-    });
-
-    gameState.configReceived = true;
-
-    showDebug("Setup configuration sent.");
-}
-
-
-/* =========================================================
-   REQUEST CURRENT CONFIG
-   ========================================================= */
-
-function requestConfig() {
-
-    showDebug("Requesting current Chastify configuration...");
-
-    sendToChastify({
-
-        type: "chastify:ext:setup:get_config"
-
-    });
-}
-
-
-/* =========================================================
-   CHASTIFY MESSAGE RECEIVER
-   ========================================================= */
-
-window.addEventListener("message", function(event) {
-
-    /*
-     * IMPORTANT:
-     *
-     * We intentionally don't restrict event.origin yet.
-     * During testing we want to see exactly what Chastify sends.
-     */
+function handleChastifyResponse(data) {
 
     showDebug(
-        "MESSAGE RECEIVED:\n" +
-        "Origin: " + event.origin +
-        "\nData:\n" +
-        JSON.stringify(event.data, null, 2)
+        "Chastify response received."
     );
 
-    const data = event.data;
 
-    if (!data) {
-        return;
-    }
+    const request =
+        chastify.pendingRequests.get(
+            data.id
+        );
+
 
     /*
-     * Some systems send strings instead of objects.
+     * We don't have a pending request for this ID.
+     *
+     * This can happen for unsolicited messages.
      */
 
-    if (typeof data === "string") {
+    if (!request) {
 
-        try {
-            const parsed = JSON.parse(data);
-            handleChastifyMessage(parsed);
-        } catch (error) {
+        showDebug(
+            "Response has no matching pending request."
+        );
 
-            showDebug(
-                "Received string message but it was not JSON."
+        /*
+         * We can still use useful information
+         * returned by Chastify.
+         */
+
+        if (data.data) {
+
+            processChastifyData(
+                data.data
             );
         }
 
         return;
     }
 
-    handleChastifyMessage(data);
 
-});
+    clearTimeout(
+        request.timeout
+    );
+
+
+    chastify.pendingRequests.delete(
+        data.id
+    );
+
+
+    if (data.ok === false) {
+
+        request.reject(
+            new Error(
+                data.error
+                    ? JSON.stringify(data.error)
+                    : "Chastify request failed."
+            )
+        );
+
+        return;
+    }
+
+
+    request.resolve(
+        data.data
+    );
+}
 
 
 /* =========================================================
-   HANDLE CHASTIFY MESSAGE
+   PROCESS CHASTIFY DATA
    ========================================================= */
 
-function handleChastifyMessage(data) {
+function processChastifyData(data) {
 
-    if (!data || typeof data !== "object") {
+    if (!data) {
         return;
     }
+
+
+    showDebug(
+        "Chastify data:\n" +
+        JSON.stringify(
+            data,
+            null,
+            2
+        )
+    );
+
+
+    /*
+     * Current response contains information
+     * such as appId and lockId.
+     */
+
+    if (data.appId) {
+
+        chastify.appId =
+            data.appId;
+    }
+
+
+    if (data.lockId) {
+
+        chastify.lockId =
+            data.lockId;
+    }
+
+
+    /*
+     * If Chastify has successfully answered,
+     * consider the connection established.
+     */
+
+    if (
+        data.hello === true ||
+        data.appId ||
+        data.lockId
+    ) {
+
+        setConnectionStatus(true);
+
+        showDebug(
+            "Chastify connection established."
+        );
+    }
+
+
+    /*
+     * Optional configuration response.
+     */
+
+    if (data.config) {
+
+        gameState.configReceived =
+            true;
+
+        applyRemoteConfig(
+            data.config
+        );
+    }
+}
+
+
+/* =========================================================
+   MESSAGE RECEIVER
+   ========================================================= */
+
+window.addEventListener(
+    "message",
+    function(event) {
+
+        showDebug(
+            "MESSAGE RECEIVED:\n" +
+            "Origin: " +
+            event.origin +
+            "\nData:\n" +
+            JSON.stringify(
+                event.data,
+                null,
+                2
+            )
+        );
+
+
+        let data =
+            event.data;
+
+
+        /*
+         * Some environments send JSON
+         * as a string.
+         */
+
+        if (
+            typeof data ===
+            "string"
+        ) {
+
+            try {
+
+                data =
+                    JSON.parse(data);
+
+            } catch (error) {
+
+                showDebug(
+                    "Message was a string but not valid JSON."
+                );
+
+                return;
+            }
+        }
+
+
+        if (
+            !data ||
+            typeof data !== "object"
+        ) {
+
+            return;
+        }
+
+
+        /*
+         * Modern Chastify response.
+         */
+
+        if (
+            data.type ===
+            "chastify:ext:resp"
+        ) {
+
+            handleChastifyResponse(
+                data
+            );
+
+            return;
+        }
+
+
+        /*
+         * Older / event based messages.
+         */
+
+        handleLegacyChastifyMessage(
+            data
+        );
+    }
+);
+
+
+/* =========================================================
+   LEGACY / EVENT MESSAGES
+   ========================================================= */
+
+function handleLegacyChastifyMessage(data) {
 
     const messageType =
         data.type ||
@@ -384,80 +634,26 @@ function handleChastifyMessage(data) {
         data.action ||
         data.messageType;
 
+
     if (!messageType) {
-
-        showDebug(
-            "Message received but no message type detected."
-        );
-
         return;
     }
 
-
-    /* ---------------------------------------------
-       SETUP INIT
-       --------------------------------------------- */
 
     if (
         messageType ===
         "chastify:ext:setup:init"
     ) {
 
-        showDebug(
-            "Chastify requested setup configuration."
-        );
-
         setConnectionStatus(true);
 
-        sendSetupConfig();
-
-        return;
-    }
-
-
-    /* ---------------------------------------------
-       GET CONFIG
-       --------------------------------------------- */
-
-    if (
-        messageType ===
-        "chastify:ext:setup:get_config"
-    ) {
-
         showDebug(
-            "Chastify requested current configuration."
+            "Chastify requested setup."
         );
 
-        sendSetupConfig();
-
         return;
     }
 
-
-    /* ---------------------------------------------
-       CONFIG RESPONSE
-       --------------------------------------------- */
-
-    if (
-        messageType ===
-        "chastify:ext:setup:config"
-    ) {
-
-        gameState.configReceived = true;
-
-        setConnectionStatus(true);
-
-        if (data.config) {
-            applyRemoteConfig(data.config);
-        }
-
-        return;
-    }
-
-
-    /* ---------------------------------------------
-       SESSION CREATED
-       --------------------------------------------- */
 
     if (
         messageType ===
@@ -474,10 +670,6 @@ function handleChastifyMessage(data) {
     }
 
 
-    /* ---------------------------------------------
-       SESSION UPDATED
-       --------------------------------------------- */
-
     if (
         messageType ===
         "chastify:session:updated"
@@ -493,14 +685,13 @@ function handleChastifyMessage(data) {
     }
 
 
-    /* ---------------------------------------------
-       GENERIC READY / CONNECTED EVENTS
-       --------------------------------------------- */
-
     if (
-        messageType === "ready" ||
-        messageType === "connected" ||
-        messageType === "chastify:ready"
+        messageType ===
+        "ready" ||
+        messageType ===
+        "connected" ||
+        messageType ===
+        "chastify:ready"
     ) {
 
         setConnectionStatus(true);
@@ -508,8 +699,148 @@ function handleChastifyMessage(data) {
         showDebug(
             "Chastify reports connection ready."
         );
+    }
+}
+
+
+/* =========================================================
+   CONNECT TO CHASTIFY
+   ========================================================= */
+
+async function connectToChastify() {
+
+    if (
+        !window.parent ||
+        window.parent === window
+    ) {
+
+        showDebug(
+            "Not running inside Chastify."
+        );
+
+        setConnectionStatus(false);
 
         return;
+    }
+
+
+    showDebug(
+        "Connecting to Chastify..."
+    );
+
+
+    /*
+     * First perform the bridge handshake.
+     */
+
+    try {
+
+        const result =
+            await chastifyRequest(
+                "setup.init",
+                {}
+            );
+
+
+        showDebug(
+            "Chastify setup response:\n" +
+            JSON.stringify(
+                result,
+                null,
+                2
+            )
+        );
+
+
+        processChastifyData(
+            result
+        );
+
+
+    } catch (error) {
+
+        showDebug(
+            "Setup request failed:\n" +
+            error.message
+        );
+
+        setConnectionStatus(false);
+
+        return;
+    }
+
+
+    /*
+     * Try to obtain session information.
+     *
+     * If this action isn't available in the
+     * current Chastify environment, the timeout
+     * will be reported without breaking the game.
+     */
+
+    try {
+
+        const session =
+            await chastifyRequest(
+                "session.get",
+                {}
+            );
+
+
+        showDebug(
+            "Session information received:\n" +
+            JSON.stringify(
+                session,
+                null,
+                2
+            )
+        );
+
+
+        processChastifyData(
+            session
+        );
+
+
+    } catch (error) {
+
+        showDebug(
+            "Session request failed:\n" +
+            error.message
+        );
+
+        /*
+         * The bridge itself is already working,
+         * so don't mark the connection offline
+         * just because session.get failed.
+         */
+
+        if (
+            chastify.appId ||
+            chastify.lockId
+        ) {
+
+            setConnectionStatus(true);
+        }
+    }
+
+
+    /*
+     * Final connection state.
+     */
+
+    if (
+        chastify.appId ||
+        chastify.lockId
+    ) {
+
+        setConnectionStatus(true);
+
+    } else {
+
+        showDebug(
+            "Chastify responded, but no session information was found."
+        );
     }
 }
 
@@ -520,9 +851,14 @@ function handleChastifyMessage(data) {
 
 function applyRemoteConfig(config) {
 
-    if (!config || typeof config !== "object") {
+    if (
+        !config ||
+        typeof config !== "object"
+    ) {
+
         return;
     }
+
 
     if (config.difficulty) {
 
@@ -530,45 +866,97 @@ function applyRemoteConfig(config) {
             config.difficulty;
     }
 
-    if (config.rewardChance !== undefined) {
+
+    if (
+        config.rewardChance !==
+        undefined
+    ) {
 
         settings.rewardChance =
-            Number(config.rewardChance);
+            Number(
+                config.rewardChance
+            );
     }
 
-    if (config.neutralChance !== undefined) {
+
+    if (
+        config.neutralChance !==
+        undefined
+    ) {
 
         settings.neutralChance =
-            Number(config.neutralChance);
+            Number(
+                config.neutralChance
+            );
     }
 
-    if (config.punishmentChance !== undefined) {
+
+    if (
+        config.punishmentChance !==
+        undefined
+    ) {
 
         settings.punishmentChance =
-            Number(config.punishmentChance);
+            Number(
+                config.punishmentChance
+            );
     }
 
-    if (config.rewardMin !== undefined) {
+
+    if (
+        config.rewardMin !==
+        undefined
+    ) {
+
         settings.rewardMin =
-            Number(config.rewardMin);
+            Number(
+                config.rewardMin
+            );
     }
 
-    if (config.rewardMax !== undefined) {
+
+    if (
+        config.rewardMax !==
+        undefined
+    ) {
+
         settings.rewardMax =
-            Number(config.rewardMax);
+            Number(
+                config.rewardMax
+            );
     }
 
-    if (config.punishmentMin !== undefined) {
+
+    if (
+        config.punishmentMin !==
+        undefined
+    ) {
+
         settings.punishmentMin =
-            Number(config.punishmentMin);
+            Number(
+                config.punishmentMin
+            );
     }
 
-    if (config.punishmentMax !== undefined) {
+
+    if (
+        config.punishmentMax !==
+        undefined
+    ) {
+
         settings.punishmentMax =
-            Number(config.punishmentMax);
+            Number(
+                config.punishmentMax
+            );
     }
+
 
     updateSettingsUI();
+
+
+    gameState.configReceived =
+        true;
+
 
     showDebug(
         "Remote configuration applied."
@@ -580,58 +968,55 @@ function applyRemoteConfig(config) {
    TIME CHANGE
    ========================================================= */
 
-/*
- * IMPORTANT:
- *
- * This function is intentionally isolated.
- *
- * Once we confirm the exact Chastify runtime API/message
- * format, THIS is the only function we need to change
- * to make rewards/punishments alter the real lock time.
- */
+function changeChastifyTime(
+    minutes,
+    reason
+) {
 
-function changeChastifyTime(minutes, reason) {
+    minutes =
+        Math.round(minutes);
 
-    minutes = Math.round(minutes);
 
     if (!minutes) {
         return;
     }
 
-    gameState.totalTimeChange += minutes;
+
+    gameState.totalTimeChange +=
+        minutes;
+
 
     const action =
         minutes > 0
             ? "add"
             : "remove";
 
+
     const amount =
         Math.abs(minutes);
+
 
     showDebug(
         `TIME ACTION: ${action} ${amount} minutes`
     );
 
+
     /*
-     * Placeholder runtime message.
+     * IMPORTANT:
      *
-     * We DO NOT assume yet that this is the final
-     * Chastify API contract.
+     * This remains a placeholder.
      *
-     * We will replace this once we see the actual
-     * runtime/session message structure from Chastify.
+     * We are only getting the connection
+     * working in this version.
+     *
+     * The actual privileged Chastify
+     * time-changing API will be connected
+     * separately.
      */
 
-    sendToChastify({
-
-        type: "chastify:ext:time",
-
-        action: action,
-
-        minutes: amount,
-
-        reason: reason || "Lost Island event"
-    });
+    showDebug(
+        "Chastify time modification is not yet connected."
+    );
 }
 
 
@@ -641,49 +1026,70 @@ function changeChastifyTime(minutes, reason) {
 
 function determineOutcome() {
 
-    let rewardChance =
+    const rewardChance =
         clamp(
-            Number(settings.rewardChance),
+            Number(
+                settings.rewardChance
+            ),
             0,
             100
         );
 
-    let neutralChance =
+
+    const neutralChance =
         clamp(
-            Number(settings.neutralChance),
+            Number(
+                settings.neutralChance
+            ),
             0,
             100
         );
 
-    let punishmentChance =
+
+    const punishmentChance =
         clamp(
-            Number(settings.punishmentChance),
+            Number(
+                settings.punishmentChance
+            ),
             0,
             100
         );
+
 
     const total =
         rewardChance +
         neutralChance +
         punishmentChance;
 
+
     if (total <= 0) {
         return "neutral";
     }
 
-    const roll =
-        Math.random() * total;
 
-    if (roll < rewardChance) {
-        return "reward";
-    }
+    const roll =
+        Math.random() *
+        total;
+
 
     if (
         roll <
-        rewardChance + neutralChance
+        rewardChance
     ) {
+
+        return "reward";
+    }
+
+
+    if (
+        roll <
+        rewardChance +
+        neutralChance
+    ) {
+
         return "neutral";
     }
+
 
     return "punishment";
 }
@@ -867,10 +1273,13 @@ function performAction(action) {
         return;
     }
 
+
     gameState.totalActions++;
+
 
     const actionEvents =
         events[action];
+
 
     const baseEvent =
         actionEvents[
@@ -880,28 +1289,31 @@ function performAction(action) {
             )
         ];
 
+
     const rngOutcome =
         determineOutcome();
+
 
     let selectedEvent =
         baseEvent;
 
-    /*
-     * RNG can override the base result.
-     *
-     * This means the same action does not always
-     * produce the same result.
-     */
 
-    if (rngOutcome !== baseEvent.outcome) {
+    if (
+        rngOutcome !==
+        baseEvent.outcome
+    ) {
 
         const matching =
             actionEvents.filter(
                 event =>
-                    event.outcome === rngOutcome
+                    event.outcome ===
+                    rngOutcome
             );
 
-        if (matching.length > 0) {
+
+        if (
+            matching.length > 0
+        ) {
 
             selectedEvent =
                 matching[
@@ -913,10 +1325,12 @@ function performAction(action) {
         }
     }
 
+
     applyEvent(
         action,
         selectedEvent
     );
+
 
     updateDisplay();
 }
@@ -926,70 +1340,79 @@ function performAction(action) {
    APPLY EVENT
    ========================================================= */
 
-function applyEvent(action, event) {
+function applyEvent(
+    action,
+    event
+) {
 
     const outcome =
-        event.outcome || "neutral";
+        event.outcome ||
+        "neutral";
 
-
-    /* ---------------------------------------------
-       RESOURCE CHANGES
-       --------------------------------------------- */
 
     if (event.health) {
 
         gameState.health =
             clamp(
-                gameState.health + event.health,
+                gameState.health +
+                event.health,
                 0,
                 100
             );
     }
+
 
     if (event.water) {
 
         gameState.water =
             Math.max(
                 0,
-                gameState.water + event.water
+                gameState.water +
+                event.water
             );
     }
+
 
     if (event.food) {
 
         gameState.food =
             Math.max(
                 0,
-                gameState.food + event.food
+                gameState.food +
+                event.food
             );
     }
+
 
     if (event.materials) {
 
         gameState.materials =
             Math.max(
                 0,
-                gameState.materials + event.materials
+                gameState.materials +
+                event.materials
             );
     }
 
 
-    /* ---------------------------------------------
-       TIME CONSEQUENCES
-       --------------------------------------------- */
-
     let timeChange = 0;
 
-    if (outcome === "reward") {
+
+    if (
+        outcome ===
+        "reward"
+    ) {
 
         timeChange =
             -randomNumber(
                 settings.rewardMin,
                 settings.rewardMax
             );
-    }
 
-    else if (outcome === "punishment") {
+    } else if (
+        outcome ===
+        "punishment"
+    ) {
 
         timeChange =
             randomNumber(
@@ -999,14 +1422,14 @@ function applyEvent(action, event) {
     }
 
 
-    /*
-     * Event-specific time can override the random
-     * value if explicitly supplied.
-     */
+    if (
+        event.time !==
+        undefined
+    ) {
 
-    if (event.time !== undefined) {
-
-        if (event.time < 0) {
+        if (
+            event.time < 0
+        ) {
 
             timeChange =
                 -randomNumber(
@@ -1014,7 +1437,9 @@ function applyEvent(action, event) {
                     settings.rewardMax
                 );
 
-        } else if (event.time > 0) {
+        } else if (
+            event.time > 0
+        ) {
 
             timeChange =
                 randomNumber(
@@ -1029,7 +1454,10 @@ function applyEvent(action, event) {
     }
 
 
-    if (timeChange !== 0) {
+    if (
+        timeChange !==
+        0
+    ) {
 
         changeChastifyTime(
             timeChange,
@@ -1038,60 +1466,79 @@ function applyEvent(action, event) {
     }
 
 
-    /* ---------------------------------------------
-       DISPLAY RESULT
-       --------------------------------------------- */
-
     let title = "";
     let icon = "";
 
-    if (outcome === "reward") {
 
-        title = "Good fortune";
+    if (
+        outcome ===
+        "reward"
+    ) {
+
+        title =
+            "Good fortune";
+
         icon = "🍀";
-    }
 
-    else if (outcome === "punishment") {
+    } else if (
+        outcome ===
+        "punishment"
+    ) {
 
-        title = "Something went wrong";
+        title =
+            "Something went wrong";
+
         icon = "⚠️";
-    }
 
-    else {
+    } else {
 
-        title = "Nothing remarkable";
+        title =
+            "Nothing remarkable";
+
         icon = "➖";
     }
 
 
     let timeText = "";
 
-    if (timeChange < 0) {
+
+    if (
+        timeChange < 0
+    ) {
 
         timeText =
             `<p><strong>🔓 Time reduction:</strong> ` +
-            `${formatMinutes(Math.abs(timeChange))}</p>`;
+            `${formatMinutes(
+                Math.abs(timeChange)
+            )}</p>`;
 
-    }
-
-    else if (timeChange > 0) {
+    } else if (
+        timeChange > 0
+    ) {
 
         timeText =
             `<p><strong>🔒 Lock time added:</strong> ` +
-            `${formatMinutes(timeChange)}</p>`;
-
+            `${formatMinutes(
+                timeChange
+            )}</p>`;
     }
 
 
     const result =
-        document.getElementById("result");
+        document.getElementById(
+            "result"
+        );
+
 
     if (result) {
 
         result.className =
             `result ${outcome}`;
 
-        result.classList.remove("hidden");
+        result.classList.remove(
+            "hidden"
+        );
+
 
         result.innerHTML = `
 
@@ -1109,27 +1556,21 @@ function applyEvent(action, event) {
                 <strong>Actions used:</strong>
                 ${gameState.totalActions}
             </p>
-
         `;
     }
 
 
     gameState.lastResult = {
+
         action: action,
+
         outcome: outcome,
+
         timeChange: timeChange
     };
 
 
-    /*
-     * Move to next day after each action.
-     *
-     * We can later change this so multiple actions
-     * belong to one day.
-     */
-
     gameState.day++;
-
 }
 
 
@@ -1140,19 +1581,29 @@ function applyEvent(action, event) {
 function updateDisplay() {
 
     const health =
-        document.getElementById("health");
+        document.getElementById(
+            "health"
+        );
 
     const water =
-        document.getElementById("water");
+        document.getElementById(
+            "water"
+        );
 
     const food =
-        document.getElementById("food");
+        document.getElementById(
+            "food"
+        );
 
     const materials =
-        document.getElementById("materials");
+        document.getElementById(
+            "materials"
+        );
 
     const day =
-        document.getElementById("day");
+        document.getElementById(
+            "day"
+        );
 
 
     if (health) {
@@ -1188,70 +1639,49 @@ function updateDisplay() {
 
 function updateSettingsUI() {
 
-    const difficulty =
-        document.getElementById("difficulty");
+    const fields = {
 
-    const rewardChance =
-        document.getElementById("rewardChance");
+        difficulty:
+            settings.difficulty,
 
-    const neutralChance =
-        document.getElementById("neutralChance");
+        rewardChance:
+            settings.rewardChance,
 
-    const punishmentChance =
-        document.getElementById("punishmentChance");
+        neutralChance:
+            settings.neutralChance,
 
-    const rewardMin =
-        document.getElementById("rewardMin");
+        punishmentChance:
+            settings.punishmentChance,
 
-    const rewardMax =
-        document.getElementById("rewardMax");
+        rewardMin:
+            settings.rewardMin,
 
-    const punishmentMin =
-        document.getElementById("punishmentMin");
+        rewardMax:
+            settings.rewardMax,
 
-    const punishmentMax =
-        document.getElementById("punishmentMax");
+        punishmentMin:
+            settings.punishmentMin,
+
+        punishmentMax:
+            settings.punishmentMax
+    };
 
 
-    if (difficulty) {
-        difficulty.value =
-            settings.difficulty;
-    }
+    Object.keys(fields).forEach(
+        function(id) {
 
-    if (rewardChance) {
-        rewardChance.value =
-            settings.rewardChance;
-    }
+            const element =
+                document.getElementById(
+                    id
+                );
 
-    if (neutralChance) {
-        neutralChance.value =
-            settings.neutralChance;
-    }
+            if (element) {
 
-    if (punishmentChance) {
-        punishmentChance.value =
-            settings.punishmentChance;
-    }
-
-    if (rewardMin) {
-        rewardMin.value =
-            settings.rewardMin;
-    }
-
-    if (rewardMax) {
-        rewardMax.value =
-            settings.rewardMax;
-    }
-
-    if (punishmentMin) {
-        punishmentMin.value =
-            settings.punishmentMin;
-    }
-
-    if (punishmentMax) {
-        punishmentMax.value =
-            settings.punishmentMax;
-    }
+                element.value =
+                    fields[id];
+            }
+        }
+    );
 }
 
 
@@ -1261,66 +1691,61 @@ function updateSettingsUI() {
 
 function saveSettings() {
 
-    const difficulty =
-        document.getElementById("difficulty");
+    const ids = [
 
-    const rewardChance =
-        document.getElementById("rewardChance");
-
-    const neutralChance =
-        document.getElementById("neutralChance");
-
-    const punishmentChance =
-        document.getElementById("punishmentChance");
-
-    const rewardMin =
-        document.getElementById("rewardMin");
-
-    const rewardMax =
-        document.getElementById("rewardMax");
-
-    const punishmentMin =
-        document.getElementById("punishmentMin");
-
-    const punishmentMax =
-        document.getElementById("punishmentMax");
+        "difficulty",
+        "rewardChance",
+        "neutralChance",
+        "punishmentChance",
+        "rewardMin",
+        "rewardMax",
+        "punishmentMin",
+        "punishmentMax"
+    ];
 
 
-    settings.difficulty =
-        difficulty.value;
+    ids.forEach(
+        function(id) {
 
-    settings.rewardChance =
-        Number(rewardChance.value);
+            const element =
+                document.getElementById(
+                    id
+                );
 
-    settings.neutralChance =
-        Number(neutralChance.value);
-
-    settings.punishmentChance =
-        Number(punishmentChance.value);
-
-    settings.rewardMin =
-        Number(rewardMin.value);
-
-    settings.rewardMax =
-        Number(rewardMax.value);
-
-    settings.punishmentMin =
-        Number(punishmentMin.value);
-
-    settings.punishmentMax =
-        Number(punishmentMax.value);
+            if (!element) {
+                return;
+            }
 
 
-    /*
-     * Validate percentages.
-     */
+            if (
+                id ===
+                "difficulty"
+            ) {
+
+                settings[id] =
+                    element.value;
+
+            } else {
+
+                settings[id] =
+                    Number(
+                        element.value
+                    );
+            }
+        }
+    );
+
 
     const total =
         settings.rewardChance +
         settings.neutralChance +
         settings.punishmentChance;
 
-    if (total !== 100) {
+
+    if (
+        total !==
+        100
+    ) {
 
         alert(
             `RNG percentages must total 100%.\n\n` +
@@ -1331,22 +1756,22 @@ function saveSettings() {
     }
 
 
-    /*
-     * Send new configuration to Chastify.
-     */
+    showDebug(
+        "Local settings saved."
+    );
 
-    sendSetupConfig();
-
-
-    /*
-     * Close settings window.
-     */
 
     const modal =
-        document.getElementById("settingsModal");
+        document.getElementById(
+            "settingsModal"
+        );
+
 
     if (modal) {
-        modal.classList.add("hidden");
+
+        modal.classList.add(
+            "hidden"
+        );
     }
 }
 
@@ -1358,19 +1783,30 @@ function saveSettings() {
 function initializeSettings() {
 
     const settingsBtn =
-        document.getElementById("settingsBtn");
+        document.getElementById(
+            "settingsBtn"
+        );
 
     const saveBtn =
-        document.getElementById("saveSettings");
+        document.getElementById(
+            "saveSettings"
+        );
 
     const closeBtn =
-        document.getElementById("closeSettings");
+        document.getElementById(
+            "closeSettings"
+        );
 
     const modal =
-        document.getElementById("settingsModal");
+        document.getElementById(
+            "settingsModal"
+        );
 
 
-    if (settingsBtn) {
+    if (
+        settingsBtn &&
+        modal
+    ) {
 
         settingsBtn.addEventListener(
             "click",
@@ -1395,7 +1831,10 @@ function initializeSettings() {
     }
 
 
-    if (closeBtn) {
+    if (
+        closeBtn &&
+        modal
+    ) {
 
         closeBtn.addEventListener(
             "click",
@@ -1421,8 +1860,9 @@ function initializeActions() {
             ".action"
         );
 
+
     buttons.forEach(
-        button => {
+        function(button) {
 
             button.addEventListener(
                 "click",
@@ -1431,7 +1871,9 @@ function initializeActions() {
                     const action =
                         this.dataset.action;
 
-                    performAction(action);
+                    performAction(
+                        action
+                    );
                 }
             );
         }
@@ -1453,9 +1895,11 @@ function initializeGame() {
 
     setConnectionStatus(false);
 
+
     showDebug(
         "Lost Island initialized."
     );
+
 
     showDebug(
         "Running inside iframe: " +
@@ -1463,22 +1907,12 @@ function initializeGame() {
     );
 
 
-    /*
-     * If we're inside Chastify, start the handshake.
-     */
+    if (
+        window.parent !==
+        window
+    ) {
 
-    if (window.parent !== window) {
-
-        requestSetup();
-
-        /*
-         * Also ask for the current configuration.
-         */
-
-        setTimeout(
-            requestConfig,
-            500
-        );
+        connectToChastify();
 
     } else {
 
