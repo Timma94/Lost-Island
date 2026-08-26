@@ -13,11 +13,6 @@
 const WORKER_URL =
     "https://lost-island-api.timvancleef.workers.dev";
 
-
-/*
- * Chastify origin.
- */
-
 const CHASTIFY_ORIGIN =
     "https://chastify.net";
 
@@ -51,7 +46,7 @@ const gameState = {
 
 
 /* =========================================================
-   DEFAULT SETTINGS
+   SETTINGS
    ========================================================= */
 
 const settings = {
@@ -62,63 +57,11 @@ const settings = {
     neutralChance: 40,
     punishmentChance: 25,
 
-    rewardMin: 30,
-    rewardMax: 60,
+    rewardMin: 60,
+    rewardMax: 180,
 
-    punishmentMin: 60,
-    punishmentMax: 300
-};
-
-
-/* =========================================================
-   DIFFICULTY
-   ========================================================= */
-
-const difficultySettings = {
-
-    easy: {
-
-        name: "Easy",
-
-        rewardMin: 30,
-        rewardMax: 60,
-
-        punishmentMin: 60,
-        punishmentMax: 180
-    },
-
-    normal: {
-
-        name: "Normal",
-
-        rewardMin: 60,
-        rewardMax: 180,
-
-        punishmentMin: 120,
-        punishmentMax: 360
-    },
-
-    hard: {
-
-        name: "Hard",
-
-        rewardMin: 120,
-        rewardMax: 360,
-
-        punishmentMin: 720,
-        punishmentMax: 1440
-    },
-
-    brutal: {
-
-        name: "Brutal",
-
-        rewardMin: 720,
-        rewardMax: 1440 * 5,
-
-        punishmentMin: 1440,
-        punishmentMax: 1440 * 5
-    }
+    punishmentMin: 120,
+    punishmentMax: 360
 };
 
 
@@ -132,9 +75,7 @@ function randomNumber(min, max) {
     max = Number(max);
 
     if (max < min) {
-
         [min, max] = [max, min];
-
     }
 
     return Math.floor(
@@ -169,7 +110,6 @@ function formatMinutes(minutes) {
     const remainingMinutes =
         minutes % 60;
 
-
     if (hours < 24) {
 
         if (remainingMinutes === 0) {
@@ -182,20 +122,17 @@ function formatMinutes(minutes) {
 
     }
 
-
     const days =
         Math.floor(hours / 24);
 
     const remainingHours =
         hours % 24;
 
-
     if (remainingHours === 0) {
 
         return `${days} day${days === 1 ? "" : "s"}`;
 
     }
-
 
     return `${days}d ${remainingHours}h`;
 }
@@ -210,7 +147,6 @@ function showDebug(message) {
     let debug =
         document.getElementById("debug");
 
-
     if (!debug) {
 
         debug =
@@ -218,44 +154,23 @@ function showDebug(message) {
 
         debug.id = "debug";
 
-        debug.style.marginTop =
-            "20px";
-
-        debug.style.padding =
-            "12px";
-
-        debug.style.background =
-            "#111";
-
-        debug.style.border =
-            "1px solid #444";
-
-        debug.style.borderRadius =
-            "8px";
-
-        debug.style.fontSize =
-            "12px";
-
-        debug.style.lineHeight =
-            "1.5";
-
-        debug.style.whiteSpace =
-            "pre-wrap";
-
-        debug.style.color =
-            "#aaa";
+        debug.style.marginTop = "20px";
+        debug.style.padding = "12px";
+        debug.style.background = "#111";
+        debug.style.border = "1px solid #444";
+        debug.style.borderRadius = "8px";
+        debug.style.fontSize = "12px";
+        debug.style.lineHeight = "1.5";
+        debug.style.whiteSpace = "pre-wrap";
+        debug.style.color = "#aaa";
 
         const main =
             document.querySelector("main");
 
         if (main) {
-
             main.appendChild(debug);
-
         }
-
     }
-
 
     debug.textContent +=
         `\n${message}`;
@@ -263,7 +178,7 @@ function showDebug(message) {
 
 
 /* =========================================================
-   SAFE DEBUG JSON
+   SAFE DEBUG OUTPUT
    ========================================================= */
 
 function safeDebugObject(object) {
@@ -273,10 +188,6 @@ function safeDebugObject(object) {
         return JSON.stringify(
             object,
             function(key, value) {
-
-                /*
-                 * Never display tokens in the debug panel.
-                 */
 
                 if (
                     key === "mainToken" ||
@@ -296,7 +207,7 @@ function safeDebugObject(object) {
             2
         );
 
-    } catch (error) {
+    } catch {
 
         return String(object);
 
@@ -313,53 +224,63 @@ function setConnectionStatus(connected) {
     gameState.chastifyConnected =
         connected;
 
-
     const dot =
         document.getElementById(
             "connectionDot"
         );
-
 
     const text =
         document.getElementById(
             "connectionText"
         );
 
-
     if (!dot || !text) {
-
         return;
-
     }
-
 
     if (connected) {
 
-        dot.classList.remove(
-            "offline"
-        );
-
-        dot.classList.add(
-            "online"
-        );
+        dot.classList.remove("offline");
+        dot.classList.add("online");
 
         text.textContent =
             "Chastify: Connected";
 
     } else {
 
-        dot.classList.remove(
-            "online"
-        );
-
-        dot.classList.add(
-            "offline"
-        );
+        dot.classList.remove("online");
+        dot.classList.add("offline");
 
         text.textContent =
             "Chastify: Offline";
-
     }
+}
+
+
+/* =========================================================
+   REQUEST ID
+   ========================================================= */
+
+function createRequestId() {
+
+    try {
+
+        if (
+            window.crypto &&
+            typeof window.crypto.randomUUID === "function"
+        ) {
+
+            return window.crypto.randomUUID();
+
+        }
+
+    } catch {}
+
+    return (
+        Date.now().toString() +
+        "-" +
+        Math.random().toString(36).substring(2)
+    );
 }
 
 
@@ -377,42 +298,38 @@ function sendToChastify(message) {
         ) {
 
             showDebug(
-                "Not running inside an iframe."
+                "ERROR: Game is not running inside an iframe."
             );
 
             return false;
         }
-
 
         window.parent.postMessage(
             message,
             CHASTIFY_ORIGIN
         );
 
-
         showDebug(
             "SENT TO CHASTIFY:\n" +
             safeDebugObject(message)
         );
-
 
         return true;
 
     } catch (error) {
 
         showDebug(
-            "ERROR sending message:\n" +
+            "ERROR sending message to Chastify:\n" +
             error.message
         );
 
         return false;
-
     }
 }
 
 
 /* =========================================================
-   CHASTIFY CONNECTION
+   INITIAL CHASTIFY CONNECTION
    ========================================================= */
 
 function connectToChastify() {
@@ -421,13 +338,6 @@ function connectToChastify() {
         "Connecting to Chastify..."
     );
 
-
-    const requestId =
-        crypto.randomUUID ?
-        crypto.randomUUID() :
-        Date.now().toString();
-
-
     sendToChastify({
 
         type:
@@ -437,7 +347,7 @@ function connectToChastify() {
             1,
 
         id:
-            requestId,
+            createRequestId(),
 
         action:
             "setup.init",
@@ -446,12 +356,11 @@ function connectToChastify() {
             {}
 
     });
-
 }
 
 
 /* =========================================================
-   REQUEST CURRENT CONFIGURATION
+   REQUEST CONFIG
    ========================================================= */
 
 function requestConfig() {
@@ -459,13 +368,6 @@ function requestConfig() {
     showDebug(
         "Requesting current Chastify configuration..."
     );
-
-
-    const requestId =
-        crypto.randomUUID ?
-        crypto.randomUUID() :
-        Date.now().toString();
-
 
     sendToChastify({
 
@@ -476,7 +378,7 @@ function requestConfig() {
             1,
 
         id:
-            requestId,
+            createRequestId(),
 
         action:
             "setup.get_config",
@@ -485,23 +387,16 @@ function requestConfig() {
             {}
 
     });
-
 }
 
 
 /* =========================================================
-   CHASTIFY MESSAGE LISTENER
+   MESSAGE LISTENER
    ========================================================= */
 
 window.addEventListener(
     "message",
     function(event) {
-
-
-        /*
-         * During development we accept the Chastify
-         * response so we can inspect the protocol.
-         */
 
         if (
             event.origin !==
@@ -509,13 +404,10 @@ window.addEventListener(
         ) {
 
             return;
-
         }
-
 
         const data =
             event.data;
-
 
         showDebug(
             "MESSAGE RECEIVED:\n" +
@@ -525,17 +417,12 @@ window.addEventListener(
             safeDebugObject(data)
         );
 
-
         if (!data) {
-
             return;
-
         }
 
-
         if (
-            typeof data ===
-            "string"
+            typeof data === "string"
         ) {
 
             try {
@@ -544,22 +431,17 @@ window.addEventListener(
                     JSON.parse(data)
                 );
 
-            } catch (error) {
+            } catch {
 
                 showDebug(
                     "Received string but it was not JSON."
                 );
-
             }
 
             return;
-
         }
 
-
-        handleChastifyMessage(
-            data
-        );
+        handleChastifyMessage(data);
 
     }
 );
@@ -577,22 +459,12 @@ function handleChastifyMessage(data) {
     ) {
 
         return;
-
     }
 
 
-    /*
-     * Chastify response format:
-     *
-     * {
-     *   type: "chastify:ext:resp",
-     *   v: 1,
-     *   id: "...",
-     *   ok: true,
-     *   data: {...}
-     * }
-     */
-
+    /* -----------------------------------------------------
+       STANDARD RESPONSE
+       ----------------------------------------------------- */
 
     if (
         data.type ===
@@ -603,7 +475,6 @@ function handleChastifyMessage(data) {
             "Chastify response received."
         );
 
-
         if (
             data.ok &&
             data.data
@@ -613,35 +484,28 @@ function handleChastifyMessage(data) {
                 data.data
             );
 
-
-            setConnectionStatus(
-                true
-            );
-
-
-            /*
-             * Show all available response data.
-             */
+            setConnectionStatus(true);
 
             showDebug(
                 "Chastify data:\n" +
-                safeDebugObject(
-                    data.data
-                )
+                safeDebugObject(data.data)
             );
 
+        } else {
+
+            showDebug(
+                "Chastify returned an unsuccessful response:\n" +
+                safeDebugObject(data)
+            );
         }
 
-
         return;
-
     }
 
 
-    /*
-     * Some versions may send setup events
-     * directly.
-     */
+    /* -----------------------------------------------------
+       OTHER POSSIBLE EVENT TYPES
+       ----------------------------------------------------- */
 
     const messageType =
         data.type ||
@@ -651,9 +515,7 @@ function handleChastifyMessage(data) {
 
 
     if (!messageType) {
-
         return;
-
     }
 
 
@@ -662,16 +524,11 @@ function handleChastifyMessage(data) {
         "chastify:session:created"
     ) {
 
-        setConnectionStatus(
-            true
-        );
+        setConnectionStatus(true);
 
-        extractChastifyInformation(
-            data
-        );
+        extractChastifyInformation(data);
 
         return;
-
     }
 
 
@@ -680,16 +537,11 @@ function handleChastifyMessage(data) {
         "chastify:session:updated"
     ) {
 
-        setConnectionStatus(
-            true
-        );
+        setConnectionStatus(true);
 
-        extractChastifyInformation(
-            data
-        );
+        extractChastifyInformation(data);
 
         return;
-
     }
 
 
@@ -702,14 +554,10 @@ function handleChastifyMessage(data) {
         "connected"
     ) {
 
-        setConnectionStatus(
-            true
-        );
+        setConnectionStatus(true);
 
         return;
-
     }
-
 }
 
 
@@ -725,51 +573,48 @@ function extractChastifyInformation(data) {
     ) {
 
         return;
-
     }
 
 
-    /*
-     * App ID
-     */
+    /* -----------------------------------------------------
+       APP ID
+       ----------------------------------------------------- */
 
     if (data.appId) {
 
         gameState.appId =
             data.appId;
-
     }
 
 
-    /*
-     * Lock ID
-     */
+    /* -----------------------------------------------------
+       LOCK ID
+       ----------------------------------------------------- */
 
     if (data.lockId) {
 
         gameState.lockId =
             data.lockId;
-
     }
 
 
-    /*
-     * Session ID candidates
-     */
+    /* -----------------------------------------------------
+       SESSION ID
+       ----------------------------------------------------- */
 
     const possibleSessionIds = [
 
         data.sessionId,
-
         data.session_id,
 
         data.session?.id,
-
         data.session?.sessionId,
 
         data.data?.sessionId,
+        data.data?.session_id,
 
-        data.data?.id
+        data.data?.session?.id,
+        data.data?.session?.sessionId
 
     ];
 
@@ -780,8 +625,7 @@ function extractChastifyInformation(data) {
     ) {
 
         if (
-            typeof value ===
-            "string" &&
+            typeof value === "string" &&
             value.length > 0
         ) {
 
@@ -789,37 +633,33 @@ function extractChastifyInformation(data) {
                 value;
 
             break;
-
         }
-
     }
 
 
-    /*
-     * Main token candidates.
-     *
-     * We store it internally but NEVER display it.
-     */
+    /* -----------------------------------------------------
+       MAIN TOKEN
+       ----------------------------------------------------- */
 
     const possibleTokens = [
 
         data.mainToken,
-
         data.main_token,
 
         data.session?.mainToken,
-
         data.session?.main_token,
 
         data.token,
-
         data.accessToken,
 
         data.data?.mainToken,
-
         data.data?.main_token,
 
-        data.data?.token
+        data.data?.session?.mainToken,
+        data.data?.session?.main_token,
+
+        data.data?.token,
+        data.data?.accessToken
 
     ];
 
@@ -830,8 +670,7 @@ function extractChastifyInformation(data) {
     ) {
 
         if (
-            typeof value ===
-            "string" &&
+            typeof value === "string" &&
             value.length > 0
         ) {
 
@@ -839,26 +678,33 @@ function extractChastifyInformation(data) {
                 value;
 
             break;
-
         }
-
     }
 
 
-    /*
-     * Debug status without exposing token.
-     */
+    /* -----------------------------------------------------
+       DEBUG STATUS
+       ----------------------------------------------------- */
 
     showDebug(
         "Chastify connection data:\n" +
         "appId: " +
-        (gameState.appId || "NOT FOUND") +
+        (
+            gameState.appId ||
+            "NOT FOUND"
+        ) +
         "\n" +
         "lockId: " +
-        (gameState.lockId || "NOT FOUND") +
+        (
+            gameState.lockId ||
+            "NOT FOUND"
+        ) +
         "\n" +
         "sessionId: " +
-        (gameState.sessionId || "NOT FOUND") +
+        (
+            gameState.sessionId ||
+            "NOT FOUND"
+        ) +
         "\n" +
         "mainToken: " +
         (
@@ -867,7 +713,6 @@ function extractChastifyInformation(data) {
                 : "NOT FOUND"
         )
     );
-
 }
 
 
@@ -886,38 +731,54 @@ async function sendTimeChangeToWorker(
 
     if (!minutes) {
 
-        return false;
-
-    }
-
-
-    /*
-     * We need session information.
-     */
-
-    if (
-        !gameState.sessionId
-    ) {
-
         showDebug(
-            "ERROR: No Chastify sessionId available."
+            "No time change requested."
         );
 
         return false;
-
     }
 
 
-    if (
-        !gameState.mainToken
-    ) {
+    /* -----------------------------------------------------
+       CURRENT STATUS
+       ----------------------------------------------------- */
+
+    showDebug(
+        "Preparing Worker request..."
+    );
+
+    showDebug(
+        "Session ID available: " +
+        Boolean(gameState.sessionId)
+    );
+
+    showDebug(
+        "Main token available: " +
+        Boolean(gameState.mainToken)
+    );
+
+
+    /* -----------------------------------------------------
+       CREDENTIAL CHECK
+       ----------------------------------------------------- */
+
+    if (!gameState.sessionId) {
 
         showDebug(
-            "ERROR: No Chastify mainToken available."
+            "STOPPED: Chastify did not provide a sessionId."
         );
 
         return false;
+    }
 
+
+    if (!gameState.mainToken) {
+
+        showDebug(
+            "STOPPED: Chastify did not provide a mainToken."
+        );
+
+        return false;
     }
 
 
@@ -934,9 +795,16 @@ async function sendTimeChangeToWorker(
         seconds +
         "\n" +
         "reason: " +
-        (reason || "Lost Island")
+        (
+            reason ||
+            "Lost Island"
+        )
     );
 
+
+    /* -----------------------------------------------------
+       WORKER CALL
+       ----------------------------------------------------- */
 
     try {
 
@@ -983,7 +851,6 @@ async function sendTimeChangeToWorker(
 
         let responseData;
 
-
         try {
 
             responseData =
@@ -995,7 +862,6 @@ async function sendTimeChangeToWorker(
 
             responseData =
                 responseText;
-
         }
 
 
@@ -1010,35 +876,35 @@ async function sendTimeChangeToWorker(
         );
 
 
-        if (
-            !response.ok
-        ) {
+        if (!response.ok) {
 
             showDebug(
-                "TIME CHANGE FAILED."
+                "WORKER REQUEST FAILED."
             );
 
             return false;
-
         }
 
 
         if (
             responseData &&
-            responseData.ok
+            responseData.ok === true
         ) {
 
             gameState.totalTimeChange +=
                 minutes;
 
             showDebug(
-                "TIME CHANGE SUCCESSFUL."
+                "WORKER ACCEPTED TIME CHANGE."
             );
 
             return true;
-
         }
 
+
+        showDebug(
+            "WORKER RESPONSE DID NOT CONFIRM SUCCESS."
+        );
 
         return false;
 
@@ -1050,9 +916,7 @@ async function sendTimeChangeToWorker(
         );
 
         return false;
-
     }
-
 }
 
 
@@ -1070,9 +934,7 @@ async function changeChastifyTime(
 
 
     if (!minutes) {
-
         return false;
-
     }
 
 
@@ -1095,41 +957,32 @@ async function changeChastifyTime(
         minutes,
         reason
     );
-
 }
 
 
 /* =========================================================
-   RANDOM OUTCOME
+   OUTCOME
    ========================================================= */
 
 function determineOutcome() {
 
-    let rewardChance =
+    const rewardChance =
         clamp(
-            Number(
-                settings.rewardChance
-            ),
+            Number(settings.rewardChance),
             0,
             100
         );
 
-
-    let neutralChance =
+    const neutralChance =
         clamp(
-            Number(
-                settings.neutralChance
-            ),
+            Number(settings.neutralChance),
             0,
             100
         );
 
-
-    let punishmentChance =
+    const punishmentChance =
         clamp(
-            Number(
-                settings.punishmentChance
-            ),
+            Number(settings.punishmentChance),
             0,
             100
         );
@@ -1141,12 +994,8 @@ function determineOutcome() {
         punishmentChance;
 
 
-    if (
-        total <= 0
-    ) {
-
+    if (total <= 0) {
         return "neutral";
-
     }
 
 
@@ -1161,7 +1010,6 @@ function determineOutcome() {
     ) {
 
         return "reward";
-
     }
 
 
@@ -1172,12 +1020,10 @@ function determineOutcome() {
     ) {
 
         return "neutral";
-
     }
 
 
     return "punishment";
-
 }
 
 
@@ -1190,7 +1036,6 @@ const events = {
     water: [
 
         {
-
             text:
                 "You follow a narrow trail between the trees. " +
                 "After some searching you discover a small freshwater pool.",
@@ -1199,28 +1044,18 @@ const events = {
                 "reward",
 
             water:
-                2,
-
-            time:
-                -30
-
+                2
         },
 
         {
-
             text:
                 "You search for a long time but find nothing useful.",
 
             outcome:
-                "neutral",
-
-            time:
-                0
-
+                "neutral"
         },
 
         {
-
             text:
                 "You push deeper into the jungle looking for water. " +
                 "A hidden sinkhole gives way beneath you.",
@@ -1230,7 +1065,6 @@ const events = {
 
             health:
                 -10
-
         }
 
     ],
@@ -1239,7 +1073,6 @@ const events = {
     explore: [
 
         {
-
             text:
                 "You explore the coastline and discover a sheltered " +
                 "area that could make a useful secondary camp.",
@@ -1249,22 +1082,18 @@ const events = {
 
             materials:
                 1
-
         },
 
         {
-
             text:
                 "The island gives you nothing but dense vegetation " +
                 "and another exhausting walk.",
 
             outcome:
                 "neutral"
-
         },
 
         {
-
             text:
                 "You wander too far from camp and lose your bearings. " +
                 "Finding your way back takes hours.",
@@ -1274,7 +1103,6 @@ const events = {
 
             health:
                 -5
-
         }
 
     ],
@@ -1283,7 +1111,6 @@ const events = {
     materials: [
 
         {
-
             text:
                 "You find several pieces of dry wood and useful branches.",
 
@@ -1292,11 +1119,9 @@ const events = {
 
             materials:
                 2
-
         },
 
         {
-
             text:
                 "Most of what you collect is damp or rotten.",
 
@@ -1305,11 +1130,9 @@ const events = {
 
             materials:
                 1
-
         },
 
         {
-
             text:
                 "A branch snaps unexpectedly and injures your hand.",
 
@@ -1318,7 +1141,6 @@ const events = {
 
             health:
                 -8
-
         }
 
     ],
@@ -1327,7 +1149,6 @@ const events = {
     wreck: [
 
         {
-
             text:
                 "You carefully search the wreckage and recover useful supplies.",
 
@@ -1339,21 +1160,17 @@ const events = {
 
             food:
                 1
-
         },
 
         {
-
             text:
                 "The wreck is unstable. You find nothing worth taking.",
 
             outcome:
                 "neutral"
-
         },
 
         {
-
             text:
                 "Part of the wreck collapses while you are searching it. " +
                 "You barely escape.",
@@ -1363,7 +1180,6 @@ const events = {
 
             health:
                 -15
-
         }
 
     ],
@@ -1372,7 +1188,6 @@ const events = {
     camp: [
 
         {
-
             text:
                 "You improve the shelter and create a more secure sleeping area.",
 
@@ -1384,22 +1199,18 @@ const events = {
 
             materials:
                 -1
-
         },
 
         {
-
             text:
                 "You spend the time repairing the camp. " +
                 "It is slightly better than before.",
 
             outcome:
                 "neutral"
-
         },
 
         {
-
             text:
                 "Your construction fails and part of the shelter collapses.",
 
@@ -1411,11 +1222,9 @@ const events = {
 
             health:
                 -5
-
         }
 
     ]
-
 };
 
 
@@ -1425,12 +1234,8 @@ const events = {
 
 function performAction(action) {
 
-    if (
-        !events[action]
-    ) {
-
+    if (!events[action]) {
         return;
-
     }
 
 
@@ -1458,10 +1263,6 @@ function performAction(action) {
         baseEvent;
 
 
-    /*
-     * RNG can override the base event.
-     */
-
     if (
         rngOutcome !==
         baseEvent.outcome
@@ -1475,9 +1276,7 @@ function performAction(action) {
             );
 
 
-        if (
-            matching.length > 0
-        ) {
+        if (matching.length > 0) {
 
             selectedEvent =
                 matching[
@@ -1486,9 +1285,7 @@ function performAction(action) {
                         matching.length - 1
                     )
                 ];
-
         }
-
     }
 
 
@@ -1496,7 +1293,6 @@ function performAction(action) {
         action,
         selectedEvent
     );
-
 }
 
 
@@ -1514,13 +1310,11 @@ async function applyEvent(
         "neutral";
 
 
-    /*
-     * RESOURCE CHANGES
-     */
+    /* -----------------------------------------------------
+       RESOURCES
+       ----------------------------------------------------- */
 
-    if (
-        event.health
-    ) {
+    if (event.health) {
 
         gameState.health =
             clamp(
@@ -1529,13 +1323,10 @@ async function applyEvent(
                 0,
                 100
             );
-
     }
 
 
-    if (
-        event.water
-    ) {
+    if (event.water) {
 
         gameState.water =
             Math.max(
@@ -1543,13 +1334,10 @@ async function applyEvent(
                 gameState.water +
                 event.water
             );
-
     }
 
 
-    if (
-        event.food
-    ) {
+    if (event.food) {
 
         gameState.food =
             Math.max(
@@ -1557,13 +1345,10 @@ async function applyEvent(
                 gameState.food +
                 event.food
             );
-
     }
 
 
-    if (
-        event.materials
-    ) {
+    if (event.materials) {
 
         gameState.materials =
             Math.max(
@@ -1571,18 +1356,14 @@ async function applyEvent(
                 gameState.materials +
                 event.materials
             );
-
     }
 
 
-    /*
-     * =====================================================
-     * TIME CONSEQUENCES
-     * =====================================================
-     */
+    /* -----------------------------------------------------
+       TIME
+       ----------------------------------------------------- */
 
-    let timeChange =
-        0;
+    let timeChange = 0;
 
 
     if (
@@ -1596,10 +1377,7 @@ async function applyEvent(
                 settings.rewardMax
             );
 
-    }
-
-
-    else if (
+    } else if (
         outcome ===
         "punishment"
     ) {
@@ -1609,84 +1387,33 @@ async function applyEvent(
                 settings.punishmentMin,
                 settings.punishmentMax
             );
-
     }
 
 
-    /*
-     * Event-specific time.
-     *
-     * Negative = reward
-     * Positive = punishment
-     */
+    /* -----------------------------------------------------
+       SEND TO CHASTIFY
+       ----------------------------------------------------- */
 
-    if (
-        event.time !== undefined
-    ) {
+    let chastifySuccess =
+        true;
 
-        if (
-            event.time < 0
-        ) {
 
-            timeChange =
-                -randomNumber(
-                    settings.rewardMin,
-                    settings.rewardMax
-                );
+    if (timeChange !== 0) {
 
-        }
-
-        else if (
-            event.time > 0
-        ) {
-
-            timeChange =
-                randomNumber(
-                    settings.punishmentMin,
-                    settings.punishmentMax
-                );
-
-        }
-
-        else {
-
-            timeChange =
-                0;
-
-        }
-
+        chastifySuccess =
+            await changeChastifyTime(
+                timeChange,
+                `${action} - ${outcome}`
+            );
     }
 
 
-    /*
-     * =====================================================
-     * SEND REAL TIME CHANGE
-     * =====================================================
-     */
+    /* -----------------------------------------------------
+       RESULT
+       ----------------------------------------------------- */
 
-    if (
-        timeChange !== 0
-    ) {
-
-        await changeChastifyTime(
-            timeChange,
-            `${action} - ${outcome}`
-        );
-
-    }
-
-
-    /*
-     * =====================================================
-     * DISPLAY RESULT
-     * =====================================================
-     */
-
-    let title =
-        "";
-
-    let icon =
-        "";
+    let title = "";
+    let icon = "";
 
 
     if (
@@ -1700,10 +1427,7 @@ async function applyEvent(
         icon =
             "🍀";
 
-    }
-
-
-    else if (
+    } else if (
         outcome ===
         "punishment"
     ) {
@@ -1714,22 +1438,17 @@ async function applyEvent(
         icon =
             "⚠️";
 
-    }
-
-
-    else {
+    } else {
 
         title =
             "Nothing remarkable";
 
         icon =
             "➖";
-
     }
 
 
-    let timeText =
-        "";
+    let timeText = "";
 
 
     if (
@@ -1742,10 +1461,7 @@ async function applyEvent(
                 Math.abs(timeChange)
             )}</p>`;
 
-    }
-
-
-    else if (
+    } else if (
         timeChange > 0
     ) {
 
@@ -1758,24 +1474,36 @@ async function applyEvent(
     }
 
 
+    let syncText = "";
+
+
+    if (
+        timeChange !== 0 &&
+        !chastifySuccess
+    ) {
+
+        syncText =
+            `<p style="color:#ff6b6b;">` +
+            `⚠️ Time was calculated by the game, ` +
+            `but Chastify did not confirm the change.` +
+            `</p>`;
+    }
+
+
     const result =
         document.getElementById(
             "result"
         );
 
 
-    if (
-        result
-    ) {
+    if (result) {
 
         result.className =
             `result ${outcome}`;
 
-
         result.classList.remove(
             "hidden"
         );
-
 
         result.innerHTML = `
 
@@ -1789,13 +1517,14 @@ async function applyEvent(
 
             ${timeText}
 
+            ${syncText}
+
             <p>
                 <strong>Actions used:</strong>
                 ${gameState.totalActions}
             </p>
 
         `;
-
     }
 
 
@@ -1808,20 +1537,18 @@ async function applyEvent(
             outcome,
 
         timeChange:
-            timeChange
+            timeChange,
+
+        chastifySuccess:
+            chastifySuccess
 
     };
 
-
-    /*
-     * Next day.
-     */
 
     gameState.day++;
 
 
     updateDisplay();
-
 }
 
 
@@ -1832,84 +1559,45 @@ async function applyEvent(
 function updateDisplay() {
 
     const health =
-        document.getElementById(
-            "health"
-        );
-
+        document.getElementById("health");
 
     const water =
-        document.getElementById(
-            "water"
-        );
-
+        document.getElementById("water");
 
     const food =
-        document.getElementById(
-            "food"
-        );
-
+        document.getElementById("food");
 
     const materials =
-        document.getElementById(
-            "materials"
-        );
-
+        document.getElementById("materials");
 
     const day =
-        document.getElementById(
-            "day"
-        );
+        document.getElementById("day");
 
 
-    if (
-        health
-    ) {
-
+    if (health) {
         health.textContent =
             gameState.health;
-
     }
 
-
-    if (
-        water
-    ) {
-
+    if (water) {
         water.textContent =
             gameState.water;
-
     }
 
-
-    if (
-        food
-    ) {
-
+    if (food) {
         food.textContent =
             gameState.food;
-
     }
 
-
-    if (
-        materials
-    ) {
-
+    if (materials) {
         materials.textContent =
             gameState.materials;
-
     }
 
-
-    if (
-        day
-    ) {
-
+    if (day) {
         day.textContent =
             gameState.day;
-
     }
-
 }
 
 
@@ -1919,133 +1607,46 @@ function updateDisplay() {
 
 function updateSettingsUI() {
 
-    const difficulty =
-        document.getElementById(
-            "difficulty"
-        );
+    const ids = [
+
+        "difficulty",
+        "rewardChance",
+        "neutralChance",
+        "punishmentChance",
+        "rewardMin",
+        "rewardMax",
+        "punishmentMin",
+        "punishmentMax"
+
+    ];
 
 
-    const rewardChance =
-        document.getElementById(
-            "rewardChance"
-        );
+    ids.forEach(
+        id => {
 
+            const element =
+                document.getElementById(id);
 
-    const neutralChance =
-        document.getElementById(
-            "neutralChance"
-        );
+            if (!element) {
+                return;
+            }
 
+            const settingName =
+                id;
 
-    const punishmentChance =
-        document.getElementById(
-            "punishmentChance"
-        );
+            if (
+                settings[
+                    settingName
+                ] !== undefined
+            ) {
 
-
-    const rewardMin =
-        document.getElementById(
-            "rewardMin"
-        );
-
-
-    const rewardMax =
-        document.getElementById(
-            "rewardMax"
-        );
-
-
-    const punishmentMin =
-        document.getElementById(
-            "punishmentMin"
-        );
-
-
-    const punishmentMax =
-        document.getElementById(
-            "punishmentMax"
-        );
-
-
-    if (
-        difficulty
-    ) {
-
-        difficulty.value =
-            settings.difficulty;
-
-    }
-
-
-    if (
-        rewardChance
-    ) {
-
-        rewardChance.value =
-            settings.rewardChance;
-
-    }
-
-
-    if (
-        neutralChance
-    ) {
-
-        neutralChance.value =
-            settings.neutralChance;
-
-    }
-
-
-    if (
-        punishmentChance
-    ) {
-
-        punishmentChance.value =
-            settings.punishmentChance;
-
-    }
-
-
-    if (
-        rewardMin
-    ) {
-
-        rewardMin.value =
-            settings.rewardMin;
-
-    }
-
-
-    if (
-        rewardMax
-    ) {
-
-        rewardMax.value =
-            settings.rewardMax;
-
-    }
-
-
-    if (
-        punishmentMin
-    ) {
-
-        punishmentMin.value =
-            settings.punishmentMin;
-
-    }
-
-
-    if (
-        punishmentMax
-    ) {
-
-        punishmentMax.value =
-            settings.punishmentMax;
-
-    }
-
+                element.value =
+                    settings[
+                        settingName
+                    ];
+            }
+        }
+    );
 }
 
 
@@ -2055,98 +1656,44 @@ function updateSettingsUI() {
 
 function saveSettings() {
 
-    const difficulty =
-        document.getElementById(
-            "difficulty"
-        );
+    const ids = [
+
+        "difficulty",
+        "rewardChance",
+        "neutralChance",
+        "punishmentChance",
+        "rewardMin",
+        "rewardMax",
+        "punishmentMin",
+        "punishmentMax"
+
+    ];
 
 
-    const rewardChance =
-        document.getElementById(
-            "rewardChance"
-        );
+    ids.forEach(
+        id => {
 
+            const element =
+                document.getElementById(id);
 
-    const neutralChance =
-        document.getElementById(
-            "neutralChance"
-        );
+            if (!element) {
+                return;
+            }
 
+            if (id === "difficulty") {
 
-    const punishmentChance =
-        document.getElementById(
-            "punishmentChance"
-        );
+                settings[id] =
+                    element.value;
 
+            } else {
 
-    const rewardMin =
-        document.getElementById(
-            "rewardMin"
-        );
-
-
-    const rewardMax =
-        document.getElementById(
-            "rewardMax"
-        );
-
-
-    const punishmentMin =
-        document.getElementById(
-            "punishmentMin"
-        );
-
-
-    const punishmentMax =
-        document.getElementById(
-            "punishmentMax"
-        );
-
-
-    settings.difficulty =
-        difficulty.value;
-
-
-    settings.rewardChance =
-        Number(
-            rewardChance.value
-        );
-
-
-    settings.neutralChance =
-        Number(
-            neutralChance.value
-        );
-
-
-    settings.punishmentChance =
-        Number(
-            punishmentChance.value
-        );
-
-
-    settings.rewardMin =
-        Number(
-            rewardMin.value
-        );
-
-
-    settings.rewardMax =
-        Number(
-            rewardMax.value
-        );
-
-
-    settings.punishmentMin =
-        Number(
-            punishmentMin.value
-        );
-
-
-    settings.punishmentMax =
-        Number(
-            punishmentMax.value
-        );
+                settings[id] =
+                    Number(
+                        element.value
+                    );
+            }
+        }
+    );
 
 
     const total =
@@ -2155,9 +1702,7 @@ function saveSettings() {
         settings.punishmentChance;
 
 
-    if (
-        total !== 100
-    ) {
+    if (total !== 100) {
 
         alert(
             `RNG percentages must total 100%.\n\n` +
@@ -2165,16 +1710,8 @@ function saveSettings() {
         );
 
         return;
-
     }
 
-
-    /*
-     * Apply difficulty defaults.
-     *
-     * We deliberately keep the manually entered
-     * values unless the user changes them.
-     */
 
     sendSetupConfig();
 
@@ -2185,16 +1722,12 @@ function saveSettings() {
         );
 
 
-    if (
-        modal
-    ) {
+    if (modal) {
 
         modal.classList.add(
             "hidden"
         );
-
     }
-
 }
 
 
@@ -2213,9 +1746,7 @@ function sendSetupConfig() {
             1,
 
         id:
-            crypto.randomUUID ?
-            crypto.randomUUID() :
-            Date.now().toString(),
+            createRequestId(),
 
         action:
             "setup.config",
@@ -2245,11 +1776,9 @@ function sendSetupConfig() {
 
             punishmentMax:
                 settings.punishmentMax
-
         }
 
     });
-
 }
 
 
@@ -2264,18 +1793,15 @@ function initializeSettings() {
             "settingsBtn"
         );
 
-
     const saveBtn =
         document.getElementById(
             "saveSettings"
         );
 
-
     const closeBtn =
         document.getElementById(
             "closeSettings"
         );
-
 
     const modal =
         document.getElementById(
@@ -2284,7 +1810,8 @@ function initializeSettings() {
 
 
     if (
-        settingsBtn
+        settingsBtn &&
+        modal
     ) {
 
         settingsBtn.addEventListener(
@@ -2299,24 +1826,21 @@ function initializeSettings() {
 
             }
         );
-
     }
 
 
-    if (
-        saveBtn
-    ) {
+    if (saveBtn) {
 
         saveBtn.addEventListener(
             "click",
             saveSettings
         );
-
     }
 
 
     if (
-        closeBtn
+        closeBtn &&
+        modal
     ) {
 
         closeBtn.addEventListener(
@@ -2329,9 +1853,7 @@ function initializeSettings() {
 
             }
         );
-
     }
-
 }
 
 
@@ -2360,18 +1882,15 @@ function initializeActions() {
                     performAction(
                         action
                     );
-
                 }
             );
-
         }
     );
-
 }
 
 
 /* =========================================================
-   INITIALIZE GAME
+   INITIALIZE
    ========================================================= */
 
 function initializeGame() {
@@ -2382,9 +1901,7 @@ function initializeGame() {
 
     initializeActions();
 
-    setConnectionStatus(
-        false
-    );
+    setConnectionStatus(false);
 
 
     showDebug(
@@ -2404,15 +1921,6 @@ function initializeGame() {
     );
 
 
-    /*
-     * IMPORTANT:
-     *
-     * We deliberately do NOT print window.location,
-     * document.referrer, tokens or other potentially
-     * sensitive iframe information.
-     */
-
-
     if (
         window.parent !== window
     ) {
@@ -2425,16 +1933,12 @@ function initializeGame() {
             1000
         );
 
-    }
-
-    else {
+    } else {
 
         showDebug(
             "Opened directly. Chastify unavailable."
         );
-
     }
-
 }
 
 
