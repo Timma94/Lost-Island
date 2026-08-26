@@ -184,54 +184,7 @@ function formatMinutes(minutes) {
    ========================================================= */
 
 function showDebug(message) {
-
-    let debug =
-        document.getElementById("debug");
-
-    if (!debug) {
-
-        debug =
-            document.createElement("div");
-
-        debug.id = "debug";
-
-        debug.style.marginTop =
-            "20px";
-
-        debug.style.padding =
-            "12px";
-
-        debug.style.background =
-            "#111";
-
-        debug.style.border =
-            "1px solid #444";
-
-        debug.style.borderRadius =
-            "8px";
-
-        debug.style.fontSize =
-            "12px";
-
-        debug.style.lineHeight =
-            "1.5";
-
-        debug.style.whiteSpace =
-            "pre-wrap";
-
-        debug.style.color =
-            "#aaa";
-
-        const main =
-            document.querySelector("main");
-
-        if (main) {
-            main.appendChild(debug);
-        }
-    }
-
-    debug.textContent +=
-        `\n${message}`;
+    // Debug disabled.
 }
 
 
@@ -331,11 +284,6 @@ function initializeChastifyLaunchContext() {
         hash.substring(1);
 
 
-    /*
-       Some implementations may provide URL-encoded
-       hash content.
-    */
-
     try {
 
         rawHash =
@@ -352,10 +300,6 @@ function initializeChastifyLaunchContext() {
     let launchData = null;
 
 
-    /* -----------------------------------------------------
-       Attempt JSON parsing
-       ----------------------------------------------------- */
-
     try {
 
         launchData =
@@ -366,10 +310,6 @@ function initializeChastifyLaunchContext() {
         launchData = null;
     }
 
-
-    /* -----------------------------------------------------
-       Attempt base64 JSON parsing
-       ----------------------------------------------------- */
 
     if (!launchData) {
 
@@ -398,10 +338,6 @@ function initializeChastifyLaunchContext() {
         }
     }
 
-
-    /* -----------------------------------------------------
-       Attempt key=value style hash
-       ----------------------------------------------------- */
 
     if (!launchData) {
 
@@ -458,11 +394,6 @@ function initializeChastifyLaunchContext() {
     }
 
 
-    /*
-       Debug only the structure.
-       Never print mainToken.
-    */
-
     showDebug(
         "Chastify launch hash parsed:\n" +
         safeDebugObject({
@@ -474,10 +405,6 @@ function initializeChastifyLaunchContext() {
         })
     );
 
-
-    /* -----------------------------------------------------
-       Extract sessionId
-       ----------------------------------------------------- */
 
     const possibleSessionIds = [
 
@@ -516,10 +443,6 @@ function initializeChastifyLaunchContext() {
     }
 
 
-    /* -----------------------------------------------------
-       Extract lockId
-       ----------------------------------------------------- */
-
     const possibleLockIds = [
 
         launchData.lockId,
@@ -554,10 +477,6 @@ function initializeChastifyLaunchContext() {
         }
     }
 
-
-    /* -----------------------------------------------------
-       Extract mainToken
-       ----------------------------------------------------- */
 
     const possibleTokens = [
 
@@ -598,10 +517,6 @@ function initializeChastifyLaunchContext() {
     }
 
 
-    /* -----------------------------------------------------
-       Extract bridge nonce
-       ----------------------------------------------------- */
-
     const possibleNonces = [
 
         launchData.bridge?.nonce,
@@ -635,10 +550,6 @@ function initializeChastifyLaunchContext() {
     }
 
 
-    /* -----------------------------------------------------
-       Extract parent origin
-       ----------------------------------------------------- */
-
     const possibleParentOrigins = [
 
         launchData.bridge?.parentOrigin,
@@ -671,10 +582,6 @@ function initializeChastifyLaunchContext() {
         }
     }
 
-
-    /* -----------------------------------------------------
-       Final diagnostic
-       ----------------------------------------------------- */
 
     showDebug(
         "Chastify launch context:\n" +
@@ -1259,10 +1166,6 @@ async function sendTimeChangeToWorker(
     }
 
 
-    /* -----------------------------------------------------
-       REQUIRE REAL CHASTIFY AUTHENTICATION
-       ----------------------------------------------------- */
-
     if (
         !gameState.sessionId
     ) {
@@ -1286,10 +1189,6 @@ async function sendTimeChangeToWorker(
         return false;
     }
 
-
-    /* -----------------------------------------------------
-       DIAGNOSTIC
-       ----------------------------------------------------- */
 
     showDebug(
         "=================================\n" +
@@ -1851,10 +1750,6 @@ async function applyEvent(
         "neutral";
 
 
-    /* -----------------------------------------------------
-       RESOURCE CHANGES
-       ----------------------------------------------------- */
-
     if (event.health) {
 
         gameState.health =
@@ -1900,10 +1795,6 @@ async function applyEvent(
     }
 
 
-    /* -----------------------------------------------------
-       TIME CONSEQUENCE
-       ----------------------------------------------------- */
-
     let timeChange =
         0;
 
@@ -1931,10 +1822,6 @@ async function applyEvent(
             );
     }
 
-
-    /* -----------------------------------------------------
-       EVENT-SPECIFIC TIME
-       ----------------------------------------------------- */
 
     if (
         event.time !== undefined
@@ -1968,10 +1855,6 @@ async function applyEvent(
     }
 
 
-    /* -----------------------------------------------------
-       SEND TIME CHANGE
-       ----------------------------------------------------- */
-
     let chastifyConfirmed =
         false;
 
@@ -1987,10 +1870,6 @@ async function applyEvent(
             );
     }
 
-
-    /* -----------------------------------------------------
-       DISPLAY RESULT
-       ----------------------------------------------------- */
 
     let title = "";
     let icon = "";
